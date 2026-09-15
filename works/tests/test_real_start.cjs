@@ -8,7 +8,7 @@ const fs = require('fs');
         const sid = servers[0].id;
         
         const jwt = require('jsonwebtoken');
-        const token = jwt.sign({ id: 'dev-user-zf2j94px2', role: 'admin' }, 'jtg-panel-super-secret');
+        const token = jwt.sign({ id: 'dev-user-zf2j94px2', role: 'admin' }, 'ivm-panel-super-secret');
         
         const res = await axios.post(`http://localhost:3000/api/servers/${sid}/start`, {}, {
             headers: { Authorization: `Bearer ${token}` }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"; 
 import { LoadingOverlay } from "../components/LoadingOverlay";
-import { Trash2, AlertTriangle, User, Save, Globe, RefreshCw, Sliders, Code2, TerminalSquare, Info, Lock, Check, Sparkles, SlidersHorizontal } from "lucide-react";
+import { Trash2, AlertTriangle, User, Save, Globe, RefreshCw, Sliders, Info, Lock, Check, Sparkles, SlidersHorizontal } from "lucide-react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -241,7 +241,7 @@ export default function ServerSettings({ serverId, server }: { serverId: string,
                           setMigrationMessage(null);
                           setShowMigrateConfirm(false);
                           try {
-                            const token = localStorage.getItem("jtg_token") || localStorage.getItem("token");
+                            const token = localStorage.getItem("ivm_token") || localStorage.getItem("token");
                             const headers: any = {};
                             if (token) headers["Authorization"] = `Bearer ${token}`;
                             const res = await axios.put(`/api/servers/${serverId}/migrate-runtime`, { targetRuntime: target }, { headers });
@@ -296,7 +296,7 @@ export default function ServerSettings({ serverId, server }: { serverId: string,
                   <div className="bg-black/40 dark:bg-black/40 backdrop-blur-xl border border-border p-6 md:p-8 rounded-3xl shadow-[0_0_40px_-15px_rgba(0,0,0,0.5)] ring-1 ring-border-subtle relative z-30 group hover:bg-black/60 transition-colors mb-8">
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-theme-500 font-bold flex items-center gap-2">
-                        {isNode ? <Code2 className="w-5 h-5 text-theme-500" /> : <TerminalSquare className="w-5 h-5 text-theme-500" />}
+                        <img src={isNode ? "/icons/nodejs.svg" : "/icons/python.svg"} alt="" className="w-5 h-5" />
                         {isNode ? "Node.js Runtime Environment" : "Python Runtime Environment"}
                       </h3>
                       <span className="flex items-center gap-1.5 text-xs font-mono bg-white/10 text-white/90 px-2.5 py-1 rounded-full border border-white/10">

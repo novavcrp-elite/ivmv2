@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { importWorld, getWorldInfo, analyzeWorld } from "../controllers/world.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getServers, createServer, checkPort, getServer, deleteServer, startServer, stopServer, restartServer, killServer, changeServerVersion, updateRuntime, migrateServerRuntime, getFiles, uploadFile, uploadChunk, completeUpload, deleteFile, renameFile, saveFileContent, sendCommand, getServerStats, updateOwner, updateIpAlias, getBackups, createBackup, downloadBackup, deleteBackup, restoreBackup, unzipFile, zipFiles, installPlugin, installMod, getInstalledPlugins, deleteInstalledPlugin, getInstalledMods, deleteInstalledMod, getModrinthProjectVersions, updateResources, updateSuspend , createFile, createDirectory, downloadFile} from "../controllers/servers.js";
+import { getServers, createServer, checkPort, getServer, deleteServer, startServer, stopServer, restartServer, killServer, changeServerVersion, updateRuntime, migrateServerRuntime, getFiles, uploadFile, uploadChunk, completeUpload, deleteFile, renameFile, saveFileContent, readFileContent, sendCommand, getServerStats, updateOwner, updateIpAlias, getBackups, createBackup, downloadBackup, deleteBackup, restoreBackup, unzipFile, zipFiles, installPlugin, installMod, getInstalledPlugins, deleteInstalledPlugin, getInstalledMods, deleteInstalledMod, getModrinthProjectVersions, updateResources, updateSuspend , createFile, createDirectory, downloadFile} from "../controllers/servers.js";
 import multer from "multer";
 
 const router = express.Router();
@@ -34,6 +34,8 @@ router.post("/:id/command", sendCommand);
 
 // Simple file endpoints
 router.get("/:id/files", getFiles);
+// Declared before the generic files routes so "/read" is never swallowed.
+router.get("/:id/files/read", readFileContent);
 router.get("/:id/files/download", downloadFile);
 router.post("/:id/files/upload", upload.single("file"), uploadFile);
 router.post("/:id/files/upload-chunk", upload.single("chunk"), uploadChunk);

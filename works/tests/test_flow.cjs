@@ -31,7 +31,7 @@ const path = require('path');
             await fs.writeJson(serversFile, servers, { spaces: 2 });
         }
 
-        const token = jwt.sign({ id: 'temp-admin', role: 'admin' }, 'jtg-panel-super-secret');
+        const token = jwt.sign({ id: 'temp-admin', role: 'admin' }, 'ivm-panel-super-secret');
         const headers = { headers: { Authorization: `Bearer ${token}` } };
         
         console.log("Starting server...");

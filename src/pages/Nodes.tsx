@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Server, Settings, Plus, X, ServerCrash, CheckCircle2, ShieldAlert, Cpu, HardDrive, Network, Activity, Clock } from "lucide-react";
+import { Server, Settings, Plus, X, ServerCrash, CheckCircle2, ShieldAlert, Cpu, HardDrive, Network, Activity, Clock, RefreshCw, Copy, Check, Pencil, Save } from "lucide-react";
 import axios from "axios";
 import { useDashboardData } from "../hooks/useDashboardData";
+import { useAuth } from "../context/AuthContext";
+import { COUNTRIES, flagFor } from "../utils/countries";
 
 function formatBytes(bytes: number) {
   if (!bytes) return '0 B';
@@ -21,8 +23,77 @@ function formatUptime(seconds: number) {
   return `${m}m`;
 }
 
-function LocalNodeDashboard({ node }: { node: any }) {
+function LocalNodeDashboard({ node, onRenamed, onChanged }: { node: any; onRenamed?: (name: string) => void; onChanged?: () => void }) {
   const { stats, state } = useDashboardData();
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState<string>(node.name || "");
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState("");
+  const [publicIp, setPublicIp] = useState<string | null>(null);
+  const [ipError, setIpError] = useState("");
+  const [ipLoading, setIpLoading] = useState(true);
+  const [ipCopied, setIpCopied] = useState(false);
+
+  // The panel only knows its private address, so the public IPv4 is resolved server-side.
+  const loadPublicIp = async (refresh = false) => {
+    setIpLoading(true);
+    try {
+      const res = await axios.get(`/api/system/public-ip${refresh ? "?refresh=true" : ""}`);
+      setPublicIp(res.data.ip);
+      setIpError("");
+    } catch (err: any) {
+      setIpError(err.response?.data?.error || "Public IP unavailable");
+    } finally {
+      setIpLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPublicIp();
+  }, []);
+
+  const saveNodeName = async () => {
+    const next = nameDraft.trim();
+    if (!next) {
+      setNameError("Name is required");
+      return;
+    }
+    setSavingName(true);
+    setNameError("");
+    try {
+      await axios.put("/api/nodes/local", { name: next });
+      onRenamed?.(next);
+      setEditingName(false);
+    } catch (err: any) {
+      setNameError(err.response?.data?.error || "Failed to rename node");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  /** Saves the free-text city/region for the local node (the API also stores the country). */
+  const saveLocation = async (raw: string) => {
+    const next = raw.trim();
+    if (next === (node.location || "")) return;
+    try {
+      await axios.put("/api/nodes/local", { location: next });
+      setNameError("");
+      onChanged?.();
+    } catch (err: any) {
+      setNameError(err.response?.data?.error || "Failed to update location");
+    }
+  };
+
+  const copyPublicIp = async () => {
+    if (!publicIp) return;
+    try {
+      await navigator.clipboard.writeText(publicIp);
+      setIpCopied(true);
+      setTimeout(() => setIpCopied(false), 1500);
+    } catch {
+      // Clipboard blocked (insecure context) — the address stays selectable.
+    }
+  };
   
   const loading = state === "loading" && !stats;
   const isOnline = stats ? true : false;
@@ -57,8 +128,118 @@ function LocalNodeDashboard({ node }: { node: any }) {
                <Activity className="h-6 w-6" />
              </div>
              <div>
-               <h3 className="text-xl font-bold">{node.name}</h3>
+               {editingName ? (
+                 <div className="flex flex-wrap items-center gap-2">
+                   <input
+                     autoFocus
+                     maxLength={60}
+                     value={nameDraft}
+                     onChange={(e) => setNameDraft(e.target.value)}
+                     onKeyDown={(e) => {
+                       if (e.key === "Enter") saveNodeName();
+                       if (e.key === "Escape") { setEditingName(false); setNameError(""); }
+                     }}
+                     placeholder="Node name"
+                     className="rounded-lg border border-border bg-background px-3 py-1.5 text-lg font-bold text-foreground focus:border-theme-600 focus:outline-none"
+                   />
+                   <button
+                     type="button"
+                     onClick={saveNodeName}
+                     disabled={savingName}
+                     title="Save name"
+                     className="inline-flex items-center gap-1.5 rounded-lg bg-theme-600 px-3 py-2 text-xs font-semibold text-white hover:bg-theme-700 transition-colors disabled:opacity-50"
+                   >
+                     <Check className="w-4 h-4" /> {savingName ? "Saving…" : "Save"}
+                   </button>
+                   <button
+                     type="button"
+                     onClick={() => { setEditingName(false); setNameError(""); }}
+                     title="Cancel"
+                     className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                   >
+                     <X className="w-4 h-4" /> Cancel
+                   </button>
+                   {nameError && <span className="text-xs text-red-400">{nameError}</span>}
+                 </div>
+               ) : (
+                 <div className="flex flex-wrap items-center gap-2">
+                   <span className="text-lg leading-none" title={node.location || node.countryCode || "No location"}>
+                     {flagFor(node.countryCode)}
+                   </span>
+                   <h3 className="text-xl font-bold">{node.name}</h3>
+                   <button
+                     type="button"
+                     onClick={() => { setNameDraft(node.name || ""); setEditingName(true); }}
+                     title="Rename node"
+                     className="text-muted-foreground hover:text-theme-400 transition-colors"
+                   >
+                     <Pencil className="w-4 h-4" />
+                   </button>
+                   <select
+                     value={node.countryCode || ""}
+                     title="Node country"
+                     onChange={async (e) => {
+                       try {
+                         await axios.put("/api/nodes/local", { countryCode: e.target.value });
+                         onChanged?.();
+                       } catch (err) {
+                         setNameError("Failed to update location");
+                       }
+                     }}
+                     className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-muted-foreground outline-none transition-colors hover:border-theme-600/60 focus:border-theme-600"
+                   >
+                     <option value="">📍 Country</option>
+                     {COUNTRIES.map(c => (
+                       <option key={c.code} value={c.code}>{flagFor(c.code)} {c.name}</option>
+                     ))}
+                   </select>
+                   <input
+                     type="text"
+                     defaultValue={node.location || ""}
+                     key={`loc-${node.location || ""}`}
+                     placeholder="City / region"
+                     title="Node location — saved when you press Enter or click away"
+                     maxLength={60}
+                     onKeyDown={(e) => {
+                       if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                       if (e.key === "Escape") {
+                         (e.target as HTMLInputElement).value = node.location || "";
+                         (e.target as HTMLInputElement).blur();
+                       }
+                     }}
+                     onBlur={(e) => saveLocation(e.target.value)}
+                     className="w-36 rounded-lg border border-border bg-background px-2 py-1 text-xs text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:border-theme-600/60 focus:border-theme-600"
+                   />
+                 </div>
+               )}
                <p className="text-sm text-muted-foreground">{node.hostname || "localhost"} — Core System Node</p>
+               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                 <span className="font-mono uppercase tracking-widest text-muted-foreground">Public IPv4</span>
+                 {publicIp ? (
+                   <button
+                     type="button"
+                     onClick={copyPublicIp}
+                     title="Copy public IPv4"
+                     className="inline-flex items-center gap-1.5 font-mono font-semibold text-theme-400 bg-theme-500/10 border border-theme-500/20 px-2 py-0.5 rounded hover:bg-theme-500/20 transition-colors"
+                   >
+                     {ipCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3 opacity-70" />}
+                     {publicIp}
+                   </button>
+                 ) : ipError ? (
+                   <span className="text-amber-400 font-mono">{ipError}</span>
+                 ) : (
+                   <span className="text-muted-foreground font-mono">resolving…</span>
+                 )}
+                 <button
+                   type="button"
+                   onClick={() => loadPublicIp(true)}
+                   disabled={ipLoading}
+                   title="Refresh public IPv4"
+                   className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                 >
+                   <RefreshCw className={`w-3.5 h-3.5 ${ipLoading ? "animate-spin" : ""}`} />
+                 </button>
+               </div>
              </div>
           </div>
           <div className="flex flex-wrap items-center gap-4">
@@ -164,7 +345,10 @@ function LocalNodeDashboard({ node }: { node: any }) {
 }
 
 export default function Nodes() {
-  const [nodes, setNodes] = useState([]);
+  const { user } = useAuth();
+  // Adding/removing nodes is restricted to admin & owner on the API side too.
+  const canManageNodes = user?.role === "admin" || user?.role === "owner";
+  const [nodes, setNodes] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -177,7 +361,8 @@ export default function Nodes() {
     apiPort: 8080,
     memory: 8192,
     disk: 50000,
-    location: "Default"
+    location: "Default",
+    countryCode: ""
   });
 
   const fetchNodes = async () => {
@@ -198,10 +383,14 @@ export default function Nodes() {
 
   const handleAddNode = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageNodes) {
+      setError("Forbidden: Admin access required");
+      return;
+    }
     try {
       await axios.post("/api/nodes", formData);
       setIsModalOpen(false);
-      setFormData({ name: "", hostname: "", apiUrl: "", token: "", ssl: false, apiPort: 8080, memory: 8192, disk: 50000, location: "Default" });
+      setFormData({ name: "", hostname: "", apiUrl: "", token: "", ssl: false, apiPort: 8080, memory: 8192, disk: 50000, location: "Default", countryCode: "" });
       fetchNodes();
     } catch (err: any) {
       setError(err.response?.data?.error || "Failed to add node");
@@ -215,12 +404,14 @@ export default function Nodes() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Nodes</h1>
           <p className="mt-2 text-muted-foreground">Monitor and manage execution environments.</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-theme-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-theme-700 transition-all"
-        >
-          <Plus className="h-5 w-5" /> Add Wings Node
-        </button>
+        {canManageNodes && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="group flex items-center gap-2 rounded-xl bg-theme-600 px-4 py-2.5 font-display text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-theme-600/25 transition-all duration-200 hover:bg-theme-500 hover:shadow-theme-500/40"
+          >
+            <Plus className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" /> Add Wings Node
+          </button>
+        )}
       </div>
 
       {error && (
@@ -242,7 +433,16 @@ export default function Nodes() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {nodes.map((node: any) => {
             if (node.isLocal) {
-              return <LocalNodeDashboard key={node.id} node={node} />;
+              return (
+                <LocalNodeDashboard
+                  key={node.id}
+                  node={node}
+                  onRenamed={(name) =>
+                    setNodes((prev: any[]) => prev.map((n) => (n.isLocal ? { ...n, name } : n)))
+                  }
+                  onChanged={fetchNodes}
+                />
+              );
             }
             return (
               <div key={node.id} className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
@@ -253,7 +453,12 @@ export default function Nodes() {
                         <Server className="h-5 w-5" />
                       </div>
                       <div>
-                        <h3 className="font-semibold">{node.name}</h3>
+                        <h3 className="flex items-center gap-2 font-semibold">
+                          <span title={node.location || node.countryCode || "No location"}>
+                            {flagFor(node.countryCode)}
+                          </span>
+                          {node.name}
+                        </h3>
                         <p className="text-xs text-muted-foreground">{node.hostname || node.ip || "localhost"}:{node.apiPort || 8080}</p>
                       </div>
                     </div>
@@ -281,7 +486,7 @@ export default function Nodes() {
         </div>
       )}
 
-      {isModalOpen && (
+      {isModalOpen && canManageNodes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border p-6">
@@ -301,6 +506,22 @@ export default function Nodes() {
                   className="w-full rounded-xl border border-border bg-background p-3 text-sm text-foreground focus:border-theme-600 focus:outline-none focus:ring-1 focus:ring-theme-600"
                   placeholder="e.g. EU Node 01"
                 />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-muted-foreground">Location</label>
+                <select
+                  value={formData.countryCode}
+                  onChange={e => setFormData({ ...formData, countryCode: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background p-3 text-sm text-foreground focus:border-theme-600 focus:outline-none focus:ring-1 focus:ring-theme-600"
+                >
+                  <option value="">— No location —</option>
+                  {COUNTRIES.map(c => (
+                    <option key={c.code} value={c.code}>{flagFor(c.code)} {c.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Shown as a country flag next to the node name.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -350,9 +571,9 @@ export default function Nodes() {
               <div className="pt-4">
                 <button
                   type="submit"
-                  className="w-full rounded-xl bg-theme-700 p-3 text-sm font-semibold text-white hover:bg-theme-600 transition-colors"
+                  className="btn-primary w-full p-3 text-xs"
                 >
-                  Save Node Configuration
+                  <Save className="h-4 w-4" /> Save Node Configuration
                 </button>
               </div>
             </form>

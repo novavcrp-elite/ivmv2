@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { readJSON, writeJSON } from "../services/db.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "jtg-panel-super-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "ivm-panel-super-secret";
 
 export const register = async (req: Request, res: Response) => {
   const settings = await readJSON("settings.json") || {};
@@ -71,11 +71,19 @@ export const login = async (req: Request, res: Response) => {
     return;
   }
 
+  // Usernames are stored as typed but compared case-insensitively everywhere else
+  // (createuser, register duplicate check), so normalize the input here too.
+  const identifier = typeof username === "string" ? username.trim().toLowerCase() : "";
+  const matchesIdentity = (u: any) =>
+    !!identifier &&
+    ((u.username && String(u.username).toLowerCase() === identifier) ||
+      (u.email && String(u.email).toLowerCase() === identifier));
+
   const isDevMode = process.env.NODE_ENV !== "production" || process.env.PORT === "3000";
 
   if (isDevMode) {
     const users = await readJSON("users.json") || [];
-    let user = users.find((u: any) => u.username === username);
+    let user = users.find(matchesIdentity);
 
     if (!user) {
       const { writeJSON } = await import("../services/db.js");
@@ -83,7 +91,7 @@ export const login = async (req: Request, res: Response) => {
       const isOwnerNeeded = users.length === 0 || !users.some((u: any) => u.role === "owner");
       user = {
         id: "dev-user-" + Math.random().toString(36).substr(2, 9),
-        username,
+        username: identifier,
         password: hashedPassword,
         role: isOwnerNeeded ? "owner" : "admin",
         passwordVersion: 0
@@ -109,10 +117,11 @@ export const login = async (req: Request, res: Response) => {
   }
 
   const users = await readJSON("users.json") || [];
-  
-  const user = users.find((u: any) => u.username === username);
 
-  if (!user) {
+  const user = users.find(matchesIdentity);
+
+  // Users created through Google auth have no password hash to compare against.
+  if (!user || !user.password) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }

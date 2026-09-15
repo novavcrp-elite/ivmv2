@@ -137,7 +137,7 @@ export const downloadJar = async (type: string, version: string, destPath: strin
     // Default: Paper server (with Purpur & Spigot high-speed fallback mirrors)
     try {
       const paperApiHeaders = {
-        "User-Agent": "JTG-Panel/2.0 (https://github.com/jtg-panel; admin@jtgpanel.internal)",
+        "User-Agent": "IVM-Panel/2.0 (https://github.com/ivm-panel; admin@ivmpanel.internal)",
         "Accept": "application/json"
       };
 

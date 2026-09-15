@@ -1,6 +1,8 @@
 import fs from "fs-extra";
 import path from "path";
-import { spawn, ChildProcess } from "child_process";
+import os from "os";
+import crypto from "crypto";
+import { spawn, ChildProcess, execFile } from "child_process";
 import { promisify } from "util";
 import { exec } from "child_process";
 import { downloadJar } from "./jarDownloader.js";
@@ -8,7 +10,98 @@ import { panelEvents } from "../events.js";
 import { getJavaVersionForMinecraft } from "../../utils/minecraftJava.js";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const processes = new Map<string, ChildProcess>();
+
+/** Records the dependency manifest a project's install was last run against. */
+const DEPS_MARKER = ".ivm-deps.json";
+const INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
+
+const fileSignature = async (filePath: string): Promise<string | null> => {
+  try {
+    const buf = await fs.readFile(filePath);
+    return crypto.createHash("sha1").update(buf).digest("hex");
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Install a project's dependencies before its process starts.
+ *
+ * The container runtime always did this inside its entrypoint, but the local
+ * runtime spawned `node` / `python3` straight onto the entry file, so anything
+ * with dependencies died on the first import. Manifests are hashed against a
+ * marker file so restarting an unchanged project does not re-run a slow install.
+ */
+async function installDependencies(
+  serverPath: string,
+  type: string,
+  logMessage: (msg: string) => void,
+): Promise<void> {
+  const isNodeApp = type === "nodejs" || type === "node";
+  const isPythonApp = type === "python" || type === "python3";
+  if (!isNodeApp && !isPythonApp) return;
+
+  const manifest = isNodeApp ? "package.json" : "requirements.txt";
+  const manifestSignature = await fileSignature(path.join(serverPath, manifest));
+  if (!manifestSignature) return; // no manifest — nothing to install
+
+  const lockSignature = isNodeApp
+    ? await fileSignature(path.join(serverPath, "package-lock.json"))
+    : null;
+  const signature = `${manifest}:${manifestSignature}:${lockSignature || ""}`;
+
+  const markerPath = path.join(serverPath, DEPS_MARKER);
+  const previous = await fs.readJSON(markerPath).catch(() => null);
+  if (previous?.signature === signature) {
+    logMessage(`${manifest} unchanged since the last install — skipping dependency install.`);
+    return;
+  }
+
+  const isNodeInstall = isNodeApp;
+  const command = isNodeInstall ? "npm" : "python3";
+  const args = isNodeInstall
+    ? ["install", "--no-audit", "--no-fund"]
+    : ["-m", "pip", "install", "--disable-pip-version-check", "-r", manifest];
+
+  logMessage(`Installing dependencies from ${manifest}...`);
+  const runInstall = (extra: string[] = []) =>
+    execFileAsync(command, [...args, ...extra], {
+      cwd: serverPath,
+      timeout: INSTALL_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    });
+
+  try {
+    let stdout = "";
+    try {
+      ({ stdout } = await runInstall());
+    } catch (err: any) {
+      const detail = `${err?.stderr || ""}${err?.stdout || ""}`;
+      // Ubuntu 23.04+ and Debian 12 mark the system interpreter as externally
+      // managed (PEP 668), which rejects a plain pip install as root.
+      if (!isNodeInstall && /externally-managed-environment/i.test(detail)) {
+        logMessage("System Python is externally managed; retrying with --break-system-packages...");
+        ({ stdout } = await runInstall(["--break-system-packages"]));
+      } else {
+        throw err;
+      }
+    }
+
+    const tail = String(stdout || "").trim().split("\n").slice(-6).join("\n");
+    if (tail) logMessage(tail);
+    await fs.writeJSON(markerPath, { signature, installedAt: new Date().toISOString() }, { spaces: 2 });
+    logMessage("Dependencies installed.");
+  } catch (err: any) {
+    const detail = String(err?.stderr || err?.message || err).trim().split("\n").slice(-8).join("\n");
+    // A failed install is worth surfacing, but the process may still run if the
+    // dependencies happen to be vendored — so warn rather than abort the start.
+    logMessage(`Dependency install failed (continuing anyway):\n${detail}`);
+  }
+}
+
 const localStartedAt = new Map<string, string>();
 const activeStreams = new Set<string>();
 
@@ -71,13 +164,13 @@ export const createLocalServer = async (serverData: any) => {
     const indexPath = path.join(serverPath, "index.js");
     const pkgPath = path.join(serverPath, "package.json");
     if (!await fs.pathExists(indexPath)) {
-      await fs.writeFile(indexPath, `// Node.js Application on JTG Panel\nconst http = require('http');\nconst port = process.env.PORT || process.env.SERVER_PORT || ${serverData.port || 3000};\n\nconsole.log('==============================================');\nconsole.log('🚀 Node.js Application Running on port ' + port);\nconsole.log('Node Version: ' + process.version);\nconsole.log('Upload your files in File Manager to customize!');\nconsole.log('==============================================');\n\nconst server = http.createServer((req, res) => {\n  res.writeHead(200, { 'Content-Type': 'application/json' });\n  res.end(JSON.stringify({ status: 'online', runtime: 'node.js', time: new Date().toISOString() }));\n});\n\nserver.listen(port, '0.0.0.0', () => {\n  console.log(\`[Server] Listening on http://0.0.0.0:\${port}\`);\n});\n`);
+      await fs.writeFile(indexPath, `// Node.js Application on IVM Panel\nconst http = require('http');\nconst port = process.env.PORT || process.env.SERVER_PORT || ${serverData.port || 3000};\n\nconsole.log('==============================================');\nconsole.log('🚀 Node.js Application Running on port ' + port);\nconsole.log('Node Version: ' + process.version);\nconsole.log('Upload your files in File Manager to customize!');\nconsole.log('==============================================');\n\nconst server = http.createServer((req, res) => {\n  res.writeHead(200, { 'Content-Type': 'application/json' });\n  res.end(JSON.stringify({ status: 'online', runtime: 'node.js', time: new Date().toISOString() }));\n});\n\nserver.listen(port, '0.0.0.0', () => {\n  console.log(\`[Server] Listening on http://0.0.0.0:\${port}\`);\n});\n`);
     }
     if (!await fs.pathExists(pkgPath)) {
       await fs.writeFile(pkgPath, JSON.stringify({
         name: (serverData.name || "node-app").toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
         version: "1.0.0",
-        description: "Node.js application hosted on JTG Panel",
+        description: "Node.js application hosted on IVM Panel",
         main: "index.js",
         scripts: { "start": "node index.js" }
       }, null, 2));
@@ -87,7 +180,7 @@ export const createLocalServer = async (serverData: any) => {
     const mainPath = path.join(serverPath, "main.py");
     const reqPath = path.join(serverPath, "requirements.txt");
     if (!await fs.pathExists(mainPath)) {
-      await fs.writeFile(mainPath, `# Python Application on JTG Panel\nimport os\nimport sys\nfrom http.server import HTTPServer, BaseHTTPRequestHandler\n\nport = int(os.environ.get("SERVER_PORT", os.environ.get("PORT", ${serverData.port || 8000})))\nprint("==============================================", flush=True)\nprint("🐍 Python Application Running", flush=True)\nprint(f"Python Version: {sys.version}", flush=True)\nprint(f"Listening Port: {port}", flush=True)\nprint("Upload your files in File Manager to customize!", flush=True)\nprint("==============================================", flush=True)\n\nclass RequestHandler(BaseHTTPRequestHandler):\n    def do_GET(self):\n        self.send_response(200)\n        self.send_header('Content-type', 'application/json')\n        self.end_headers()\n        self.wfile.write(b'{"status": "online", "runtime": "python"}')\n\n    def log_message(self, format, *args):\n        print(f"[{self.log_date_time_string()}] {format % args}", flush=True)\n\nserver = HTTPServer(('0.0.0.0', port), RequestHandler)\nprint(f"[Server] Listening on http://0.0.0.0:{port}", flush=True)\ntry:\n    server.serve_forever()\nexcept KeyboardInterrupt:\n    print("\\nStopping server...", flush=True)\n    server.server_close()\n`);
+      await fs.writeFile(mainPath, `# Python Application on IVM Panel\nimport os\nimport sys\nfrom http.server import HTTPServer, BaseHTTPRequestHandler\n\nport = int(os.environ.get("SERVER_PORT", os.environ.get("PORT", ${serverData.port || 8000})))\nprint("==============================================", flush=True)\nprint("🐍 Python Application Running", flush=True)\nprint(f"Python Version: {sys.version}", flush=True)\nprint(f"Listening Port: {port}", flush=True)\nprint("Upload your files in File Manager to customize!", flush=True)\nprint("==============================================", flush=True)\n\nclass RequestHandler(BaseHTTPRequestHandler):\n    def do_GET(self):\n        self.send_response(200)\n        self.send_header('Content-type', 'application/json')\n        self.end_headers()\n        self.wfile.write(b'{"status": "online", "runtime": "python"}')\n\n    def log_message(self, format, *args):\n        print(f"[{self.log_date_time_string()}] {format % args}", flush=True)\n\nserver = HTTPServer(('0.0.0.0', port), RequestHandler)\nprint(f"[Server] Listening on http://0.0.0.0:{port}", flush=True)\ntry:\n    server.serve_forever()\nexcept KeyboardInterrupt:\n    print("\\nStopping server...", flush=True)\n    server.server_close()\n`);
     }
     if (!await fs.pathExists(reqPath)) {
       await fs.writeFile(reqPath, "# Add python dependencies here\n");
@@ -170,6 +263,7 @@ export const startLocalServer = async (id: string, serverData: any) => {
         break;
       }
     }
+    await installDependencies(serverPath, type, logMessage);
     child = spawn("node", [entry], {
       cwd: serverPath,
       env: {
@@ -188,6 +282,7 @@ export const startLocalServer = async (id: string, serverData: any) => {
         break;
       }
     }
+    await installDependencies(serverPath, type, logMessage);
     child = spawn("python3", ["-u", entry], {
       cwd: serverPath,
       env: {
@@ -227,7 +322,7 @@ export const startLocalServer = async (id: string, serverData: any) => {
     await fs.writeFile(eulaPath, "eula=true\n");
 
     const memory = serverData.ram || 1;
-    const effectiveJava = serverData.javaVersion || getJavaVersionForMinecraft(serverData.version || "26.3", serverData.type);
+    const effectiveJava = serverData.javaVersion || getJavaVersionForMinecraft(serverData.version || "26.2", serverData.type);
     const javaBin = await resolveJavaBinary(effectiveJava);
     if (!javaBin) {
       const errMessage = "Java (JDK/JRE) was not found on this system. Please install Java 21 (e.g. 'sudo apt update && sudo apt install -y openjdk-21-jre-headless') or select Docker runtime.";
@@ -397,23 +492,60 @@ export const getLocalServerStatus = async (id: string) => {
   };
 };
 
+/** Last CPU tick sample per server, used to derive an instantaneous load. */
+const cpuSamples = new Map<string, { ticks: number; at: number }>();
+
+/**
+ * Instantaneous CPU percentage for a process, from /proc/<pid>/stat.
+ *
+ * `ps -o %cpu` reports an average across the whole process lifetime, so a
+ * server that was busy at boot and idle afterwards reads a flat 0.00% forever —
+ * which is what made the CPU graph look dead. Differencing two samples of the
+ * process's CPU ticks shows the load that is happening now.
+ */
+async function sampleCpu(id: string, pid: number): Promise<number> {
+  try {
+    const stat = await fs.readFile(`/proc/${pid}/stat`, "utf-8");
+    // The second field is the executable name in parentheses and may itself
+    // contain spaces, so the fields after it are read from the last ")".
+    const tail = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    const ticks = (parseInt(tail[11], 10) || 0) + (parseInt(tail[12], 10) || 0);
+
+    const now = Date.now();
+    const previous = cpuSamples.get(id);
+    cpuSamples.set(id, { ticks, at: now });
+
+    if (!previous || now <= previous.at) return 0;
+
+    const USER_HZ = 100;
+    const cores = os.cpus()?.length || 1;
+    const elapsed = (now - previous.at) / 1000;
+    const usedSeconds = Math.max(0, ticks - previous.ticks) / USER_HZ;
+    return Math.max(0, Math.min(100, (usedSeconds / elapsed) * (100 / cores)));
+  } catch {
+    return 0;
+  }
+}
+
 export const getLocalServerStats = async (id: string) => {
   const child = processes.get(id);
   if (!child || !child.pid || !processes.has(id)) {
-    return { cpu: 0, ram: 0, disk: 0 };
+    cpuSamples.delete(id);
+    // netIn/netOut are null rather than 0: a host process has no network
+    // namespace of its own, so its bytes cannot be attributed, and reporting 0
+    // would draw a plausible-looking but fabricated flat line.
+    return { cpu: 0, ram: 0, disk: 0, netIn: null, netOut: null };
   }
 
-  let cpu = 0;
   let ram = 0;
   let disk = 0;
+  const cpu = await sampleCpu(id, child.pid);
 
   try {
-    const { stdout } = await execAsync(`ps -p ${child.pid} -o %cpu,rss`);
+    const { stdout } = await execAsync(`ps -p ${child.pid} -o rss`);
     const lines = stdout.trim().split("\n");
     if (lines.length > 1) {
-      const parts = lines[1].trim().split(/\s+/);
-      cpu = parseFloat(parts[0]) || 0;
-      const rssKb = parseInt(parts[1]) || 0;
+      const rssKb = parseInt(lines[1].trim().split(/\s+/)[0]) || 0;
       ram = Math.round((rssKb / 1024) * 10) / 10;
     }
   } catch (e) {}
@@ -431,7 +563,9 @@ export const getLocalServerStats = async (id: string) => {
   return {
     cpu,
     ram,
-    disk
+    disk,
+    netIn: null,
+    netOut: null,
   };
 };
 

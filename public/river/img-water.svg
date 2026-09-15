@@ -1,0 +1,56 @@
+<svg width="2048" height="1373" viewBox="0 0 2048 1373" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <linearGradient id="waterDepth" x1="1024" y1="860" x2="1024" y2="1373" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#103A52" stop-opacity="0"/>
+    <stop offset="0.55" stop-color="#103A52" stop-opacity="0.22"/>
+    <stop offset="1" stop-color="#092636" stop-opacity="0.45"/>
+  </linearGradient>
+  <linearGradient id="waterShimmer" x1="1024" y1="868" x2="1024" y2="1373" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#BFE8F5" stop-opacity="0.22"/>
+    <stop offset="0.4" stop-color="#BFE8F5" stop-opacity="0.06"/>
+    <stop offset="1" stop-color="#BFE8F5" stop-opacity="0"/>
+  </linearGradient>
+  <pattern id="ripplesFine" x="0" y="0" width="300" height="86" patternUnits="userSpaceOnUse">
+    <path d="M18 18 q 34 -5 68 0 t 68 0" stroke="#EAF7FF" stroke-opacity="0.24" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <path d="M168 52 q 44 -6 88 0 t 88 0" stroke="#EAF7FF" stroke-opacity="0.16" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </pattern>
+  <pattern id="ripplesMid" x="0" y="0" width="520" height="120" patternUnits="userSpaceOnUse">
+    <path d="M30 26 q 55 -7 110 0 t 110 0" stroke="#EAF7FF" stroke-opacity="0.2" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M300 74 q 70 -8 140 0 t 140 0" stroke="#EAF7FF" stroke-opacity="0.14" stroke-width="5" fill="none" stroke-linecap="round"/>
+  </pattern>
+  <pattern id="ripplesNear" x="0" y="0" width="760" height="170" patternUnits="userSpaceOnUse">
+    <path d="M40 40 q 80 -10 160 0 t 160 0" stroke="#EAF7FF" stroke-opacity="0.18" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <path d="M430 112 q 100 -11 200 0 t 200 0" stroke="#EAF7FF" stroke-opacity="0.12" stroke-width="7" fill="none" stroke-linecap="round"/>
+  </pattern>
+</defs>
+
+<!-- far water: fine, dense ripples -->
+<rect x="0" y="868" width="2048" height="140" fill="url(#ripplesFine)"/>
+<!-- mid water -->
+<rect x="0" y="1000" width="2048" height="185" fill="url(#ripplesMid)"/>
+<!-- near water: larger, slower ripples -->
+<rect x="0" y="1180" width="2048" height="193" fill="url(#ripplesNear)"/>
+
+<!-- light shimmer just under the horizon, then depth/vignette -->
+<rect x="0" y="866" width="2048" height="180" fill="url(#waterShimmer)"/>
+<rect x="0" y="862" width="2048" height="511" fill="url(#waterDepth)"/>
+
+<!-- shoreline surf where the water meets the far bank -->
+<path d="M-40 906 q 210 -26 420 4 t 420 6 t 420 -10 t 420 8 t 420 -6 t 420 12" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="8" fill="none" stroke-linecap="round"/>
+<path d="M-40 934 q 190 -22 380 6 t 380 8 t 380 -12 t 380 10 t 380 -8 t 380 14" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="6" fill="none" stroke-linecap="round"/>
+
+<!-- sun glitter trail down the water -->
+<g stroke="#FFE9B8" stroke-linecap="round" fill="none">
+  <path d="M700 924 h 96" stroke-opacity="0.34" stroke-width="3"/>
+  <path d="M712 952 h 74" stroke-opacity="0.3" stroke-width="3.5"/>
+  <path d="M690 982 h 118" stroke-opacity="0.28" stroke-width="4"/>
+  <path d="M716 1016 h 82" stroke-opacity="0.26" stroke-width="4.5"/>
+  <path d="M684 1054 h 138" stroke-opacity="0.24" stroke-width="5"/>
+  <path d="M710 1096 h 96" stroke-opacity="0.22" stroke-width="5.5"/>
+  <path d="M676 1142 h 156" stroke-opacity="0.2" stroke-width="6"/>
+  <path d="M706 1192 h 108" stroke-opacity="0.18" stroke-width="7"/>
+  <path d="M668 1246 h 178" stroke-opacity="0.16" stroke-width="8"/>
+  <path d="M702 1304 h 122" stroke-opacity="0.14" stroke-width="9"/>
+  <path d="M660 1364 h 200" stroke-opacity="0.12" stroke-width="10"/>
+</g>
+</svg>

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { useParams, Link, Routes, Route, useLocation } from "react-router-dom";
 import axios from "axios";
-import { Terminal, Folder, Play, Square, RefreshCw, ArrowLeft, Sliders, Archive, AlertTriangle, Copy, Check, Menu, X, Users, LogOut, Lock, Power } from "lucide-react";
+import { Terminal, Folder, Play, Square, RefreshCw, ArrowLeft, Sliders, Archive, AlertTriangle, Copy, Check, Menu, X, Users, LogOut, Lock, Power, Database } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import ServerConsole from "../components/ServerConsole";
@@ -13,6 +13,7 @@ import ServerBackups from "../components/ServerBackups";
 import PluginManager from "../components/PluginManager";
 import ModManager from "../components/ModManager";
 import SubUsersManager from "../components/SubUsersManager";
+import ServerDatabases from "../components/ServerDatabases";
 import ServerSFTP from "../components/ServerSFTP";
 import PlayitTunnel from "./PlayitTunnel";
 import { Puzzle, Box, Network } from "lucide-react";
@@ -129,6 +130,15 @@ export default function ServerView() {
   if (!isProxy && isModSoftware) {
     tabs.push({ name: "Mods", path: `/servers/${id}/mods`, exactPath: "mods", icon: <Box size={18} /> });
   }
+
+  // Databases live outside the server folder, so they are worth a permanent tab
+  // rather than being buried in settings.
+  tabs.push({
+    name: "Databases",
+    path: `/servers/${id}/databases`,
+    exactPath: "databases",
+    icon: <Database size={18} />,
+  });
 
   tabs.push(
     { name: "Settings", path: `/servers/${id}/settings`, exactPath: "settings", icon: <Settings size={18} /> },
@@ -287,7 +297,8 @@ export default function ServerView() {
              <Route path="/files" element={<FileManager serverId={id!} />} />
              <Route path="/sftp" element={<ServerSFTP serverId={id!} server={server} />} />
              <Route path="/subusers" element={<SubUsersManager serverId={id!} />} />
-             <Route path="/settings" element={<ServerSettings serverId={id!} server={server} />} />
+             <Route path="/databases" element={<ServerDatabases serverId={id!} server={server} />} />
+            <Route path="/settings" element={<ServerSettings serverId={id!} server={server} />} />
              <Route path="/backup" element={<ServerBackups serverId={id!} />} />
              <Route path="/plugins" element={<PluginManager serverId={id!} server={server} />} />
              <Route path="/mods" element={<ModManager serverId={id!} server={server} />} />

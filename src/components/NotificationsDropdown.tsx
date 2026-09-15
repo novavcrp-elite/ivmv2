@@ -33,7 +33,7 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
   },
   {
     id: "notif-3",
-    title: "Welcome to JTG Panel",
+    title: "Welcome to IVM Panel",
     message: "Create high-performance game servers with one-click deployment.",
     type: "info",
     timestamp: "1h ago",
@@ -47,7 +47,7 @@ export default function NotificationsDropdown() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
-      const saved = localStorage.getItem("jtg_notifications");
+      const saved = localStorage.getItem("ivm_notifications");
       return saved ? JSON.parse(saved) : DEFAULT_NOTIFICATIONS;
     } catch {
       return DEFAULT_NOTIFICATIONS;
@@ -58,7 +58,7 @@ export default function NotificationsDropdown() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    localStorage.setItem("jtg_notifications", JSON.stringify(notifications));
+    localStorage.setItem("ivm_notifications", JSON.stringify(notifications));
   }, [notifications]);
 
   // Close dropdown on click outside or Escape

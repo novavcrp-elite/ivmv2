@@ -301,7 +301,7 @@ export default function CategorizedVersionDropdown({
             <Search className="w-4 h-4 text-zinc-400 mr-2 shrink-0" />
             <input
               type="text"
-              placeholder="Search version (e.g. 26.3, 1.20, 1.16)..."
+              placeholder="Search version (e.g. 26.2, 1.21, 1.20)..."
               className="bg-transparent border-none outline-none text-white text-sm w-full font-mono placeholder-zinc-500"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -435,9 +435,12 @@ export default function CategorizedVersionDropdown({
                     {/* Sub-versions list inside category */}
                     {isExpanded && (
                       <div className="border-t border-[#1f1f1f] bg-[#0c0c0c] py-1 px-1 space-y-0.5">
-                        {cat.versions.map(v => {
+                        {cat.versions.map((v, vIdx) => {
                           const isSel = value === v;
-                          const isTop26 = v === "26.3";
+                          // The newest version is simply whichever the source lists
+                          // first. This used to be pinned to the literal "26.3", so
+                          // the badge vanished as soon as that version was superseded.
+                          const isTop26 = Boolean(cat.isLatest) && vIdx === 0;
                           return (
                             <button
                               key={v}

@@ -12,7 +12,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { panelName, panelLogo } = useSettings();
 
-  const pName = panelName || 'JTG PANEL';
+  const pName = panelName || 'IVM PANEL';
   const nameParts = pName.split(' ');
   const firstWord = nameParts[0].toUpperCase();
   const restWords = nameParts.slice(1).join(' ').toUpperCase() || 'PANEL';
@@ -89,7 +89,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     {/* Show logo in top bar for all screens */}
                     <Link to="/" className="flex items-center gap-3 group">
                         {panelLogo ? (
-                            <img src={panelLogo} alt="Logo" className="w-7 h-7 object-contain" />
+                            <img src={panelLogo} alt="Logo" className="h-8 w-8 rounded-lg object-cover ring-1 ring-white/10 shadow-[0_0_18px_-6px_rgba(var(--theme-rgb-500),0.7)]" />
                         ) : (
                             <div className="w-7 h-7 bg-white flex items-center justify-center group-hover:rotate-45 transition-transform duration-500">
                                 <div className="w-3.5 h-3.5 bg-black"></div>

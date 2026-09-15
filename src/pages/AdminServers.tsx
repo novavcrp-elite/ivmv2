@@ -3,7 +3,7 @@ import PageHeader from "../components/PageHeader";
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
-import { Server, Settings, Search, Trash2, Edit2, Play, Square, PauseCircle, MoreVertical, ChevronRight } from "lucide-react";
+import { Server, Settings, Search, Trash2, Edit2, Play, Square, PauseCircle, MoreVertical, ChevronRight, X, Save, Check } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -90,7 +90,7 @@ export default function AdminServers() {
   );
 
   return (
-    <div className="w-full relative z-10">
+    <div className="admin-convoy w-full relative z-10">
       <PageHeader 
         title="Manage Servers" 
         subtitle="FLEET ADMINISTRATION" 
@@ -185,8 +185,12 @@ export default function AdminServers() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-3">
-                  <button type="button" onClick={() => setEditingServer(null)} className="px-4 py-2 bg-muted hover:bg-muted-hover rounded-lg">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold">Save Changes</button>
+                  <button type="button" onClick={() => setEditingServer(null)} className="btn-outline px-4 py-2 text-xs">
+                    <X className="h-4 w-4" /> Cancel
+                  </button>
+                  <button type="submit" className="btn-primary px-4 py-2 text-xs">
+                    <Save className="h-4 w-4" /> Save Changes
+                  </button>
                 </div>
               </form>
             </motion.div>
@@ -222,8 +226,12 @@ export default function AdminServers() {
                   </select>
                 </div>
                 <div className="flex justify-end gap-3">
-                  <button type="button" onClick={() => setSuspendingServer(null)} className="px-4 py-2 bg-muted hover:bg-muted-hover rounded-lg">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-amber-600 hover:bg-theme-600 rounded-lg font-bold">Apply</button>
+                  <button type="button" onClick={() => setSuspendingServer(null)} className="btn-outline px-4 py-2 text-xs">
+                    <X className="h-4 w-4" /> Cancel
+                  </button>
+                  <button type="submit" className="btn-primary px-4 py-2 text-xs">
+                    <Check className="h-4 w-4" /> Apply
+                  </button>
                 </div>
               </form>
             </motion.div>
@@ -244,8 +252,12 @@ export default function AdminServers() {
               <h2 className="text-xl font-bold mb-2 text-theme-400">Delete Server?</h2>
               <p className="text-muted-foreground mb-6">Are you sure you want to permanently delete <strong>{deletingServer.name}</strong>? This action cannot be undone and will destroy all data.</p>
               <div className="flex justify-end gap-3">
-                <button onClick={() => setDeletingServer(null)} className="px-4 py-2 bg-muted hover:bg-muted-hover rounded-lg">Cancel</button>
-                <button onClick={handleDelete} className="px-4 py-2 bg-theme-600 hover:bg-theme-500 rounded-lg font-bold">Yes, Delete</button>
+                <button onClick={() => setDeletingServer(null)} className="btn-outline px-4 py-2 text-xs">
+                  <X className="h-4 w-4" /> Cancel
+                </button>
+                <button onClick={handleDelete} className="btn-danger px-4 py-2 text-xs">
+                  <Trash2 className="h-4 w-4" /> Yes, Delete
+                </button>
               </div>
             </motion.div>
           </div>

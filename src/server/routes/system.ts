@@ -6,6 +6,8 @@ import { exec } from "child_process";
 import util from "util";
 const execPromise = util.promisify(exec);
 import { readJSON, writeJSON } from "../services/db.js";
+import { getPublicIPv4 } from "../services/publicIp.js";
+import { detectLxc, setSimulationOverride } from "../services/lxc.js";
 import bcrypt from "bcryptjs";
 
 const router = express.Router();
@@ -16,11 +18,22 @@ router.get("/version", async (req, res) => {
   res.json({
     currentVersion: "3.0.0",
     latestVersion: "3.0.0",
-    panel: "JTG Panel",
+    panel: "IVM Panel",
     runtime: process.env.DEFAULT_RUNTIME || "docker",
     mainPort: 6767,
     devPort: 3000
   });
+});
+
+// Public IPv4 of the host running this panel, shown on the local node card.
+// Pass ?refresh=true to bypass the 10 minute cache.
+router.get("/public-ip", async (req, res) => {
+  const force = req.query.refresh === "true" || req.query.refresh === "1";
+  try {
+    res.json(await getPublicIPv4(force));
+  } catch (err: any) {
+    res.status(503).json({ error: err?.message || "Unable to resolve the public IPv4 address" });
+  }
 });
 
 router.get("/versions", async (req, res) => {
@@ -247,32 +260,19 @@ router.put("/settings", async (req, res) => {
   if(user.role !== "admin" && user.role !== "owner") return res.status(403).json({ error: "Forbidden"});
   const { 
     panelName, panelLogo, panelBackgroundImage, panelBackgroundBlur, 
-    enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, theme,
+    enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration,
     enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId,
-    firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId, defaultRuntime 
+    firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId, defaultRuntime,
+    panelDescription, vpsSimulation
   } = req.body;
   const settings = await readJSON("settings.json") || {};
+  // The page title and link-preview tags are rendered per request from these
+  // settings, so nothing needs to be written into the HTML files on disk.
   if (panelName !== undefined) {
-    settings.panelName = panelName || "JTG Panel";
-    try {
-      const fs = await import("fs/promises");
-      const path = await import("path");
-      const targetPaths = [
-        path.join(process.cwd(), "index.html"),
-        path.join(process.cwd(), "dist", "index.html")
-      ];
-      for (const p of targetPaths) {
-        try {
-          let html = await fs.readFile(p, "utf-8");
-          html = html.replace(/<title>.*<\/title>/i, `<title>${settings.panelName}</title>`);
-          await fs.writeFile(p, html, "utf-8");
-        } catch (e) {
-          // Ignore if file doesn't exist
-        }
-      }
-    } catch (err) {
-      console.error("Error updating html title:", err);
-    }
+    settings.panelName = panelName || "IVM Panel";
+  }
+  if (panelDescription !== undefined) {
+    settings.panelDescription = String(panelDescription).slice(0, 400);
   }
   if (panelLogo !== undefined) settings.panelLogo = panelLogo;
   if (panelBackgroundImage !== undefined) settings.panelBackgroundImage = panelBackgroundImage;
@@ -281,26 +281,32 @@ router.put("/settings", async (req, res) => {
   if (enableTutorial !== undefined) settings.enableTutorial = enableTutorial;
   if (enableLoginAnimation !== undefined) settings.enableLoginAnimation = enableLoginAnimation;
   if (enableRegistration !== undefined) settings.enableRegistration = enableRegistration;
-  if (theme !== undefined) settings.theme = theme;
   if (enableGoogleLogin !== undefined) settings.enableGoogleLogin = enableGoogleLogin;
   if (firebaseApiKey !== undefined) settings.firebaseApiKey = firebaseApiKey;
   if (firebaseAuthDomain !== undefined) settings.firebaseAuthDomain = firebaseAuthDomain;
   if (firebaseProjectId !== undefined) settings.firebaseProjectId = firebaseProjectId;
   if (firebaseStorageBucket !== undefined) settings.firebaseStorageBucket = firebaseStorageBucket;
   if (firebaseMessagingSenderId !== undefined) settings.firebaseMessagingSenderId = firebaseMessagingSenderId;
-  if (firebaseAppId !== undefined) settings.firebaseAppId = firebaseAppId;
-
-  if (defaultRuntime !== undefined) {
+  if (firebaseAppId !== undefined) settings.firebaseAppId = firebaseAppId;  if (defaultRuntime !== undefined) {
     const isDevPanel = (process.env.PANEL_TYPE === "dev" || process.env.PORT === "3000") && !process.env.FORCE_MAIN_PANEL;
     if (!isDevPanel) {
-      return res.status(403).json({ error: "Runtime switching is only allowed in the Developer Panel (Port 3000). On the Main Panel, runtime is locked to your installation configuration."});
+      return res.status(403).json({ error: "Runtime switching is only allowed in the Developer Panel (Port 3000). On the Main Panel, runtime is locked to your installation configuration." });
     }
     settings.defaultRuntime = defaultRuntime;
   }
 
+  // VPS simulation is off by default; this is the explicit opt-in for hosts
+  // that cannot nest containers and only want the UI demoable.
+  if (vpsSimulation !== undefined) {
+    settings.vpsSimulation = Boolean(vpsSimulation);
+    setSimulationOverride(settings.vpsSimulation);
+  }
+
   await writeJSON("settings.json", settings);
+  // A status change here has to invalidate the cached runtime detection.
+  if (vpsSimulation !== undefined) await detectLxc(true);
   req.app.get("io")?.emit("settings_updated");
-  res.json({ success: true, defaultRuntime: settings.defaultRuntime });
+  res.json({ success: true, defaultRuntime: settings.defaultRuntime, vpsSimulation: settings.vpsSimulation });
 });
 
 router.post("/update", async (req, res) => {
@@ -319,8 +325,8 @@ router.post("/update", async (req, res) => {
   const fs = await import("fs");
   setTimeout(() => {
     try {
-      const outLog = fs.openSync("/tmp/jtg_update.log", "a");
-      const errLog = fs.openSync("/tmp/jtg_update.log", "a");
+      const outLog = fs.openSync("/tmp/ivm_update.log", "a");
+      const errLog = fs.openSync("/tmp/ivm_update.log", "a");
       const child = spawn("bash", ["update.sh"], {
         detached: true,
         stdio: ["ignore", outLog, errLog],
@@ -340,7 +346,7 @@ router.get("/update-status", async (req, res) => {
 
   try {
     const fs = await import("fs/promises");
-    const logContent = await fs.readFile("/tmp/jtg_update.log", "utf-8");
+    const logContent = await fs.readFile("/tmp/ivm_update.log", "utf-8");
     const lines = logContent.split("\n");
     const recentLines = lines.slice(-40).join("\n");
     res.json({ success: true, logs: recentLines });

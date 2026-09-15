@@ -20,7 +20,7 @@ import {
 import axios from "axios";
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
-import { Server, Plus, ChevronRight, Settings, Lock } from "lucide-react";
+import { Server, Plus, ChevronRight, Settings, Lock, Trash2, AlertTriangle, X } from "lucide-react";
 import { motion, type Variants } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import ServerLiveStats from "../components/ServerLiveStats";
@@ -43,6 +43,7 @@ interface ServersState {
   servers: ServerRecord[];
   error: string | null;
   isLoading: boolean;
+  refresh: () => void;
 }
 
 /* ── STEP 3 · Constants ───────────────────────────────────────────────────── */
@@ -101,7 +102,7 @@ function useServers(pollIntervalMs = POLL_INTERVAL_MS): ServersState {
     };
   }, [fetchServers, pollIntervalMs]);
 
-  return { servers, error, isLoading };
+  return { servers, error, isLoading, refresh: () => void fetchServers() };
 }
 
 /* ── STEP 5 · Primitives ──────────────────────────────────────────────────── */
@@ -151,8 +152,12 @@ function Metric({ label, children }: { label: string; children: ReactNode }) {
 /* ── STEP 6 · ServerCard ──────────────────────────────────────────────────── */
 const ServerCard = memo(function ServerCard({
   server,
+  canDelete = false,
+  onDelete,
 }: {
   server: ServerRecord;
+  canDelete?: boolean;
+  onDelete?: (server: ServerRecord) => void;
 }) {
   const online = isOnline(server.status);
   const isSuspended = server.suspended;
@@ -188,9 +193,27 @@ const ServerCard = memo(function ServerCard({
             </div>
           </div>
         </div>
-        {!isSuspended && (
-          <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-foreground-muted" />
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {canDelete && (
+            <button
+              type="button"
+              title={`Delete ${server.name}`}
+              aria-label={`Delete server ${server.name}`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete?.(server);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-400 transition-colors hover:border-red-500 hover:bg-red-500/20 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          )}
+          {!isSuspended && (
+            <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-foreground-muted" />
+          )}
+        </div>
       </div>
       {/* 6.3 · Metrics */}
       <div className="mt-5 grid grid-cols-2 gap-4 rounded-xl border border-border-subtle bg-muted px-4 py-4 sm:grid-cols-4">
@@ -284,7 +307,25 @@ function EmptyState({ isAdmin }: { isAdmin: boolean }) {
 /* ── STEP 8 · Page composition ────────────────────────────────────────────── */
 export default function ServerList() {
   const { user } = useAuth();
-  const { servers, error, isLoading } = useServers();
+  const { servers, error, isLoading, refresh } = useServers();
+  const [deletingServer, setDeletingServer] = useState<ServerRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteServer = async () => {
+    if (!deletingServer) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await axios.delete(`/api/servers/${deletingServer.id}`);
+      setDeletingServer(null);
+      refresh();
+    } catch (err: any) {
+      setDeleteError(err.response?.data?.error || "Failed to delete server");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // 8.1 · Gating — resolve auth BEFORE making any role decision.
   //        `user` is undefined while auth is still restoring; null when logged
@@ -349,13 +390,73 @@ export default function ServerList() {
         >
           {hasServers ? (
             servers.map((server) => (
-              <ServerCard key={server.id} server={server} />
+              <ServerCard
+                key={server.id}
+                server={server}
+                canDelete={isAdmin}
+                onDelete={setDeletingServer}
+              />
             ))
           ) : (
             <EmptyState isAdmin={isAdmin} />
           )}
         </motion.section>
       </div>
+
+      {/* 8.4d · Delete confirmation (admins/owners only) */}
+      {deletingServer && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-red-500/30 bg-card shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border-subtle p-5">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 rounded-lg bg-red-500/15 p-2 text-red-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold text-foreground">Delete server?</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    <strong className="text-foreground">{deletingServer.name}</strong> and all of its
+                    files, backups and sub-users will be destroyed. This cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setDeletingServer(null); setDeleteError(null); }}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {deleteError && (
+              <div role="alert" className="border-b border-red-500/20 bg-red-500/10 px-5 py-3 text-sm text-red-300">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-3 p-5">
+              <button
+                type="button"
+                onClick={() => { setDeletingServer(null); setDeleteError(null); }}
+                className="btn-outline px-4 py-2 text-xs"
+              >
+                <X className="h-4 w-4" /> Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteServer}
+                disabled={isDeleting}
+                className="btn-danger px-4 py-2 text-xs"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeleting ? "Deleting…" : "Delete permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,15 +5,15 @@ import { io } from "socket.io-client";
 export const SettingsContext = createContext<any>(null);
 
 export const SettingsProvider = ({ children }: { children: React.ReactNode }) => {
-  const [panelName, setPanelName] = useState<string>("JTG Panel");
+  const [panelName, setPanelName] = useState<string>("IVM Panel");
   const [panelLogo, setPanelLogo] = useState<string>("");
+  const [panelDescription, setPanelDescription] = useState<string>("");
   const [panelBackgroundImage, setPanelBackgroundImage] = useState<string>("");
   const [panelBackgroundBlur, setPanelBackgroundBlur] = useState<number>(10);
   const [enablePlayit, setEnablePlayit] = useState<boolean>(false);
   const [enableTutorial, setEnableTutorial] = useState<boolean>(true);
   const [enableLoginAnimation, setEnableLoginAnimation] = useState<boolean>(true);
   const [enableRegistration, setEnableRegistration] = useState<boolean>(true);
-  const [theme, setTheme] = useState<string>("red");
   const [enableGoogleLogin, setEnableGoogleLogin] = useState<boolean>(false);
   const [firebaseApiKey, setFirebaseApiKey] = useState<string>("");
   const [firebaseAuthDomain, setFirebaseAuthDomain] = useState<string>("");
@@ -24,7 +24,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
   const [defaultRuntime, setDefaultRuntime] = useState<string>("docker");
   const [isDevPanel, setIsDevPanel] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      const sim = localStorage.getItem("jtg_simulate_dev_panel");
+      const sim = localStorage.getItem("ivm_simulate_dev_panel");
       if (sim !== null) return sim === "true";
       if (window.location.port === "3000") return true;
       if (window.location.port === "6767") return false;
@@ -36,7 +36,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     setIsDevPanel(prev => {
       const next = !prev;
       if (typeof window !== "undefined") {
-        localStorage.setItem("jtg_simulate_dev_panel", String(next));
+        localStorage.setItem("ivm_simulate_dev_panel", String(next));
       }
       return next;
     });
@@ -47,6 +47,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       const res = await axios.get("/api/settings");
       if (res.data.panelName) setPanelName(res.data.panelName);
       if (res.data.panelLogo !== undefined) setPanelLogo(res.data.panelLogo);
+      if (res.data.panelDescription !== undefined) setPanelDescription(res.data.panelDescription);
       if (res.data.panelBackgroundImage !== undefined) setPanelBackgroundImage(res.data.panelBackgroundImage);
       if (res.data.panelBackgroundBlur !== undefined) setPanelBackgroundBlur(res.data.panelBackgroundBlur);
       if (res.data.enablePlayit !== undefined) setEnablePlayit(res.data.enablePlayit);
@@ -62,7 +63,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       if (res.data.firebaseAppId !== undefined) setFirebaseAppId(res.data.firebaseAppId);
       if (res.data.defaultRuntime !== undefined) setDefaultRuntime(res.data.defaultRuntime);
       if (res.data.isDevPanel !== undefined) {
-        const sim = localStorage.getItem("jtg_simulate_dev_panel");
+        const sim = localStorage.getItem("ivm_simulate_dev_panel");
         if (sim === null && typeof window !== "undefined") {
           if (window.location.port === "6767") {
             setIsDevPanel(false);
@@ -73,12 +74,6 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
             setIsDevPanel(Boolean(res.data.isDevPanel && window.location.port === "3000"));
           }
         }
-      }
-      if (res.data.theme !== undefined) {
-        setTheme(res.data.theme);
-        document.documentElement.setAttribute("data-theme", res.data.theme || "red");
-      } else {
-        document.documentElement.setAttribute("data-theme", "red");
       }
     } catch (e) {}
   };
@@ -103,10 +98,6 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
   }, [panelName]);
   
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme || "red");
-  }, [theme]);
-
-  useEffect(() => {
     if (panelLogo) {
       let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
       if (!link) {
@@ -118,7 +109,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     } else {
       let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
       if (link) {
-        link.href = "/vite.svg"; // Fallback or clear
+        link.href = "/ivm-logo.png"; // Bundled panel logo
       }
     }
   }, [panelLogo]);
@@ -127,13 +118,13 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     <SettingsContext.Provider value={{ 
       panelName, setPanelName, 
       panelLogo, setPanelLogo, 
+      panelDescription, setPanelDescription, 
       panelBackgroundImage, setPanelBackgroundImage, 
       panelBackgroundBlur, setPanelBackgroundBlur, 
       enablePlayit, setEnablePlayit, 
       enableTutorial, setEnableTutorial,
       enableLoginAnimation, setEnableLoginAnimation,
       enableRegistration, setEnableRegistration,
-      theme, setTheme,
       enableGoogleLogin, setEnableGoogleLogin,
       firebaseApiKey, setFirebaseApiKey,
       firebaseAuthDomain, setFirebaseAuthDomain,

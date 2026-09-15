@@ -93,7 +93,7 @@ export default function Register() {
         >
           <div className="flex items-center gap-3 mb-10">
             {panelLogo ? (
-              <img src={panelLogo} alt="Logo" className="w-10 h-10 rounded-xl object-cover" />
+              <img src={panelLogo} alt="Logo" className="h-12 w-12 rounded-xl object-cover ring-1 ring-white/10 shadow-[0_0_20px_-6px_rgba(var(--theme-rgb-500),0.7)]" />
             ) : (
               <div className="w-10 h-10 rounded-xl bg-theme-700 flex items-center justify-center text-white shadow-lg">
                 <Server size={20} />

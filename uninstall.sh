@@ -1,6 +1,6 @@
 #!/bin/bash
 # =========================================================
-# JTG Panel - Automated Uninstall Script
+# IVM Panel - Automated Uninstall Script
 # =========================================================
 
 # Ensure running in bash
@@ -18,7 +18,10 @@ NC='\033[0m'
 
 if [ -f "package.json" ]; then
     WORK_DIR="."
+elif [ -d "Ivm" ] && [ -f "Ivm/package.json" ]; then
+    WORK_DIR="Ivm"
 elif [ -d "Jtg" ] && [ -f "Jtg/package.json" ]; then
+    # legacy working directory from before the IVM rebrand
     WORK_DIR="Jtg"
 else
     WORK_DIR="."
@@ -31,7 +34,7 @@ print_banner() {
     fi
     echo -e "${CYAN}${BOLD}"
     echo "╔══════════════════════════════════════════════╗"
-    echo "║             JTG PANEL UNINSTALLER            ║"
+    echo "║             IVM PANEL UNINSTALLER            ║"
     echo "╠══════════════════════════════════════════════╣"
     echo -e "${NC}"
 }
@@ -53,7 +56,7 @@ run_pm2() {
 execute_step() {
     local msg="$1"
     shift
-    local step_id="jtg_uninst_$RANDOM"
+    local step_id="ivm_uninst_$RANDOM"
     local log_file="/tmp/${step_id}.log"
     
     printf "  ${CYAN}→${NC} %-42s " "$msg"
@@ -109,9 +112,9 @@ RUNTIME="Unknown"
 if [ "$UN_CHOICE" = "1" ]; then RUNTIME="Docker"; fi
 if [ "$UN_CHOICE" = "2" ]; then RUNTIME="Local Node.js"; fi
 if [ "$UN_CHOICE" = "3" ]; then
-    if (run_pm2 list 2>/dev/null | grep -q "jtg-main") || (run_pm2 list 2>/dev/null | grep -q "jtg-admin") || (run_pm2 list 2>/dev/null | grep -q "jtg-panel"); then
+    if (run_pm2 list 2>/dev/null | grep -q "ivm-main") || (run_pm2 list 2>/dev/null | grep -q "ivm-admin") || (run_pm2 list 2>/dev/null | grep -q "ivm-panel"); then
         RUNTIME="Local Node.js"
-    elif command -v docker &> /dev/null && docker ps -a --format '{{.Names}}' | grep -qE "^(jtg-main|jtg-admin)$"; then
+    elif command -v docker &> /dev/null && docker ps -a --format '{{.Names}}' | grep -qE "^(ivm-main|ivm-admin)$"; then
         RUNTIME="Docker"
     else
         RUNTIME="Local Node.js"
@@ -131,10 +134,10 @@ fi
 
 print_banner
 echo "║ Runtime: $RUNTIME"
-echo "║ Panel: JTG Panel"
+echo "║ Panel: IVM Panel"
 echo "║ Owner: $OWNER"
 echo "║"
-echo "║ Are you sure you want to uninstall JTG Panel?║"
+echo "║ Are you sure you want to uninstall IVM Panel?║"
 echo "║ 1) Yes, continue                             ║"
 echo "║ 2) No, cancel                                ║"
 echo "╚══════════════════════════════════════════════╝"
@@ -164,12 +167,12 @@ stop_docker() {
     elif command -v docker-compose &> /dev/null; then
         docker-compose down || true
     fi
-    $DOCKER_CLI rm -f jtg-main jtg-admin 2>/dev/null || true
-    $DOCKER_CLI rmi jtg-main jtg-admin 2>/dev/null || true
+    $DOCKER_CLI rm -f ivm-main ivm-admin 2>/dev/null || true
+    $DOCKER_CLI rmi ivm-main ivm-admin 2>/dev/null || true
 }
 
 stop_pm2() {
-    run_pm2 delete jtg-main jtg-admin jtg-panel 2>/dev/null || true
+    run_pm2 delete ivm-main ivm-admin ivm-panel 2>/dev/null || true
     run_pm2 save --force 2>/dev/null || true
 }
 
@@ -177,8 +180,16 @@ clean_files() {
     rm -rf node_modules dist .logs package-lock.json
 }
 
-delete_jtg_directory() {
+delete_ivm_directory() {
     local dirs_to_remove=()
+    if [ -n "$ORIGINAL_CALL_DIR" ] && [ -d "$ORIGINAL_CALL_DIR/Ivm" ]; then dirs_to_remove+=("$ORIGINAL_CALL_DIR/Ivm"); fi
+    if [ -n "$ORIGINAL_CALL_DIR" ] && [ -d "$ORIGINAL_CALL_DIR/ivm" ]; then dirs_to_remove+=("$ORIGINAL_CALL_DIR/ivm"); fi
+    if [ -d "Ivm" ]; then dirs_to_remove+=("$(pwd)/Ivm"); fi
+    if [ -d "ivm" ]; then dirs_to_remove+=("$(pwd)/ivm"); fi
+    if [ -d "../Ivm" ]; then dirs_to_remove+=("$(cd .. 2>/dev/null && pwd)/Ivm"); fi
+    if [ -d "../ivm" ]; then dirs_to_remove+=("$(cd .. 2>/dev/null && pwd)/ivm"); fi
+
+    # legacy directory names from before the IVM rebrand
     if [ -n "$ORIGINAL_CALL_DIR" ] && [ -d "$ORIGINAL_CALL_DIR/Jtg" ]; then dirs_to_remove+=("$ORIGINAL_CALL_DIR/Jtg"); fi
     if [ -n "$ORIGINAL_CALL_DIR" ] && [ -d "$ORIGINAL_CALL_DIR/jtg" ]; then dirs_to_remove+=("$ORIGINAL_CALL_DIR/jtg"); fi
     if [ -d "Jtg" ]; then dirs_to_remove+=("$(pwd)/Jtg"); fi
@@ -187,15 +198,19 @@ delete_jtg_directory() {
     if [ -d "../jtg" ]; then dirs_to_remove+=("$(cd .. 2>/dev/null && pwd)/jtg"); fi
 
     for base in "$ORIGINAL_CALL_DIR" "$HOME" "/root" "/opt" "/var/www" "/srv"; do
+        if [ -d "$base/Ivm" ]; then dirs_to_remove+=("$base/Ivm"); fi
+        if [ -d "$base/ivm" ]; then dirs_to_remove+=("$base/ivm"); fi
         if [ -d "$base/Jtg" ]; then dirs_to_remove+=("$base/Jtg"); fi
         if [ -d "$base/jtg" ]; then dirs_to_remove+=("$base/jtg"); fi
     done
 
     local cur_name="$(basename "$TARGET_PANEL_DIR" 2>/dev/null || echo "")"
     case "$cur_name" in
-        [Jj][Tt][Gg]*) dirs_to_remove+=("$TARGET_PANEL_DIR") ;;
+        [Jj][Tt][Gg]*|[Ii][Vv][Mm]*) dirs_to_remove+=("$TARGET_PANEL_DIR") ;;
     esac
-    if [ "$WORK_DIR" = "Jtg" ] && [ -d "$WORK_DIR" ]; then dirs_to_remove+=("$(cd "$WORK_DIR" 2>/dev/null && pwd)"); fi
+    if [ "$WORK_DIR" = "Ivm" ] || [ "$WORK_DIR" = "Jtg" ]; then
+        if [ -d "$WORK_DIR" ]; then dirs_to_remove+=("$(cd "$WORK_DIR" 2>/dev/null && pwd)"); fi
+    fi
 
     cd /tmp 2>/dev/null || cd "$HOME" 2>/dev/null || cd /root 2>/dev/null || cd / 2>/dev/null || true
 
@@ -216,17 +231,17 @@ else
 fi
 
 execute_step "Removing Panel Runtime Files" clean_files
-execute_step "Deleting Jtg Directory" delete_jtg_directory
+execute_step "Deleting Ivm Directory" delete_ivm_directory
 
 echo -e "\n${CYAN}${BOLD}"
 echo "╔══════════════════════════════════════════════╗"
 echo "║                                              ║"
 echo -e "║            ${GREEN}✓ UNINSTALL COMPLETE${CYAN}              ║"
 echo "║                                              ║"
-echo "║              JTG PANEL REMOVED               ║"
+echo "║              IVM PANEL REMOVED               ║"
 echo "║                                              ║"
 echo "║  Runtime resources cleaned safely.           ║"
-echo "║  Jtg directory deleted successfully.         ║"
+echo "║  Ivm directory deleted successfully.         ║"
 echo "║  Unrelated VPS data was preserved.           ║"
 echo "║                                              ║"
 echo "╚══════════════════════════════════════════════╝"

@@ -15,6 +15,7 @@ backups/
 .backup/
 .logs/
 node-compile-cache/
+__pycache__/
 
 # Internal works scratch & backup files
 works/temporary/*

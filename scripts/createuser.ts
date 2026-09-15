@@ -10,15 +10,41 @@ const USERS_FILE = path.join(DATA_DIR, "users.json");
 fs.ensureDirSync(DATA_DIR);
 if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, "[]");
 
-console.log("=== JTG Panel Owner User Creation ===");
+console.log("=== IVM Panel Owner User Creation ===");
+
+// Supported CLI flags: username <value> password <value> mail|email <value>
+const ARG_ALIASES: Record<string, "username" | "password" | "email"> = {
+  username: "username",
+  user: "username",
+  password: "password",
+  pass: "password",
+  mail: "email",
+  email: "email",
+};
+
+function parseArgs(argv: string[]) {
+  const values: { username?: string; password?: string; email?: string } = {};
+  for (let i = 0; i < argv.length; i++) {
+    const field = ARG_ALIASES[String(argv[i]).toLowerCase()];
+    if (!field) continue;
+    const value = argv[i + 1];
+    // Skip when the next token is another flag or missing entirely.
+    if (value === undefined || value.startsWith("--") || ARG_ALIASES[String(value).toLowerCase()]) continue;
+    values[field] = value;
+    i++;
+  }
+  return values;
+}
 
 async function run() {
   const users = await fs.readJson(USERS_FILE);
-  const envUser = process.env.JTG_OWNER_USER;
-  const envPass = process.env.JTG_OWNER_PASS;
+  const cli = parseArgs(process.argv.slice(2));
+  const username = cli.username ?? process.env.IVM_OWNER_USER;
+  const password = cli.password ?? process.env.IVM_OWNER_PASS;
+  const email = cli.email ?? process.env.IVM_OWNER_EMAIL;
 
-  if (envUser && envPass) {
-    await createOrUpdateOwner(users, envUser.trim(), envPass);
+  if (username && password) {
+    await createOrUpdateOwner(users, username.trim(), password, email?.trim());
     return;
   }
 
@@ -34,12 +60,12 @@ async function run() {
         console.error("Username and password are required.");
         process.exit(1);
       }
-      await createOrUpdateOwner(users, username.trim(), password);
+      await createOrUpdateOwner(users, username.trim(), password, email?.trim());
     });
   });
 }
 
-async function createOrUpdateOwner(users: any[], username: string, password: string) {
+async function createOrUpdateOwner(users: any[], username: string, password: string, email?: string) {
   if (!username || username.length < 3) {
     console.error("Error: Username must be at least 3 characters.");
     process.exit(1);
@@ -55,6 +81,7 @@ async function createOrUpdateOwner(users: any[], username: string, password: str
   if (existingIndex !== -1) {
     users[existingIndex].password = hashedPassword;
     users[existingIndex].role = "owner";
+    if (email) users[existingIndex].email = email;
     users[existingIndex].passwordVersion = (users[existingIndex].passwordVersion || 0) + 1;
     await fs.writeJson(USERS_FILE, users, { spaces: 2 });
     console.log(`User '${username}' updated to Owner successfully.`);
@@ -68,6 +95,7 @@ async function createOrUpdateOwner(users: any[], username: string, password: str
       id: "owner-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
       username,
       password: hashedPassword,
+      ...(email ? { email } : {}),
       role: "owner",
       passwordVersion: 0,
       createdAt: new Date().toISOString()

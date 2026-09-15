@@ -8,6 +8,7 @@ import {
   FileArchive, FileCode, Check, AlertTriangle, ChevronRight, FolderDown, RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import FileEditor from "./FileEditor";
 
 interface FileItem {
   name: string;
@@ -118,42 +119,16 @@ export default function FileManager({ serverId }: { serverId: string }) {
     setPath(path.endsWith("/") ? path + dirName : path + "/" + dirName);
   };
 
-  const openFile = async (name: string) => {
-    if (!name.match(/\.(txt|json|yml|yaml|properties|log|conf|ini|sh|bat|cmd|env|toml|xml|md)$/i)) {
-      showToast("Binary format cannot be directly edited in text editor.", "error");
-      return;
-    }
-    const fullPath = path.endsWith("/") ? path + name : path + "/" + name;
-    try {
-      setIsLoading(true);
-      const res = await axios.get(`/api/servers/${serverId}/files?path=${encodeURIComponent(fullPath)}`);
-      if (res.data.isFile) {
-        setEditingFile(name);
-        setFileContent(res.data.content);
-      }
-    } catch (e) {
-      showToast("Failed to load file contents", "error");
-    } finally {
-      setIsLoading(false);
-    }
+  const openFile = (name: string) => {
+    // No extension allowlist any more: the server inspects the bytes and reports
+    // whether the file is binary, which beats guessing from the name (that list
+    // blocked .js, .py, .java, .lua, .css and anything untitled).
+    setEditingFile(name);
   };
 
-  const saveFile = async () => {
-    if (!editingFile) return;
-    setIsSaving(true);
-    try {
-      const fullPath = path.endsWith("/") ? path + editingFile : path + "/" + editingFile;
-      await axios.post(`/api/servers/${serverId}/files/save`, {
-        filePath: fullPath,
-        content: fileContent
-      });
-      showToast(`Saved ${editingFile} successfully`, "success");
-    } catch (e) {
-      showToast("Failed to save file", "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const editingFilePath = editingFile
+    ? (path.endsWith("/") ? path + editingFile : path + "/" + editingFile)
+    : "";
 
   // --- Actions ---
 
@@ -525,14 +500,10 @@ export default function FileManager({ serverId }: { serverId: string }) {
               )}
             </>
           ) : (
-            <button 
-              disabled={isSaving} 
-              onClick={saveFile} 
-              className="flex items-center space-x-2 px-4 py-2 bg-theme-700 hover:bg-theme-600 rounded-xl text-xs font-bold text-white transition-all shadow-md shadow-theme-700/20 disabled:opacity-50 cursor-pointer"
-            >
-              {isSaving ? <div className="w-4 h-4 rounded-full border-2 border-white/50 border-t-white animate-spin" /> : <Save size={16} />}
-              <span>{isSaving ? "Saving..." : "Save Changes"}</span>
-            </button>
+            // The editor carries its own save/copy/wrap toolbar.
+            <span className="text-[11px] text-muted-foreground font-mono px-2">
+              editing
+            </span>
           )}
         </div>
       </div>
@@ -546,11 +517,11 @@ export default function FileManager({ serverId }: { serverId: string }) {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex-1 flex flex-col min-h-0"
             >
-              <textarea 
-                value={fileContent} 
-                onChange={(e) => setFileContent(e.target.value)}
-                className="flex-1 w-full h-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-slate-200 font-mono text-xs sm:text-sm focus:outline-none focus:border-theme-600/50 resize-none custom-scrollbar min-h-0 shadow-inner leading-relaxed"
-                spellCheck={false}
+              <FileEditor
+                serverId={serverId}
+                filePath={editingFilePath}
+                onClose={() => { setEditingFile(null); fetchFiles(); }}
+                showToast={showToast}
               />
             </motion.div>
           ) : (

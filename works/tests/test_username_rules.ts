@@ -32,7 +32,7 @@ async function runTests() {
     {
       id: "local-admin-1",
       username: "localadmin",
-      email: "admin@jtg.internal",
+      email: "admin@ivm.internal",
       password: "hashedpassword456",
       role: "admin"
     }

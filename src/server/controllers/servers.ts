@@ -15,7 +15,7 @@ import {
 import { getLocalProcessInfo } from "../services/local.js";
 import { createSftpUser, deleteSftpUser } from "../services/sftp.js";
 import { downloadJar } from "../services/jarDownloader.js";
-import { isSandbox, isNodeSandbox, checkNodeSandbox } from "../services/docker.js";
+import { isSandbox, isNodeSandbox, checkNodeSandbox, getDefaultVersion } from "../services/docker.js";
 import crypto from "crypto";
 import fs from "fs-extra";
 import path from "path";
@@ -24,6 +24,31 @@ import extract from "extract-zip";
 import { extractArchive } from "../utils/extract.js";
 
 const serverOperationLocks = new Set<string>();
+
+/**
+ * Whether a server's runtime can actually be located and acted on.
+ *
+ * Gating on `containerId` alone was wrong: the local runtime deliberately has
+ * no container, so every container-shaped check silently treated such a server
+ * as missing — stop/restart/command returned 404 and live status was never
+ * refreshed for it.
+ */
+const hasRuntime = (server: any) => server.runtimeType === "local" || Boolean(server.containerId);
+
+/**
+ * Release the current runtime ahead of rebuilding it.
+ *
+ * The local runtime's files *are* the server directory, so it is only stopped.
+ * Calling the delete path here would wipe the world data — the container path
+ * can be deleted safely because its files live on the host bind mount.
+ */
+const releaseRuntimeForRebuild = async (server: any) => {
+  if (server.runtimeType === "local") {
+    await stopServerRuntime(server);
+  } else {
+    await deleteServerRuntime(server);
+  }
+};
 
 export const getServers = async (req: Request, res: Response) => {
   const user = (req as any).user;
@@ -34,7 +59,7 @@ export const getServers = async (req: Request, res: Response) => {
 
   // Update statuses
   const updatedServers = await Promise.all(userServers.map(async (server: any) => {
-    if (server.containerId) {
+    if (hasRuntime(server)) {
       const status = await getServerRuntimeStatus(server);
       const isRunning = !!status?.State?.Running;
       server.status = isRunning ? "online" : "offline";
@@ -106,7 +131,7 @@ export const getServerStats = async (req: Request, res: Response) => {
     }
   }
 
-  if (server.containerId) {
+  if (hasRuntime(server)) {
     const stats = await getServerRuntimeStats(server);
     res.json({
       ...stats,
@@ -147,6 +172,16 @@ export const checkPort = async (req: Request, res: Response) => {
 // Simple in-memory mutex to prevent race conditions on server creation
 let isCreatingServer = false;
 
+/**
+ * Quotas come from the browser, so never trust the shape or range.
+ * Anything unparseable falls back to the default; 0 means "none allowed".
+ */
+function clampLimit(value: any, fallback: number): number {
+  const n = Number(value);
+  if (!isFinite(n) || n < 0) return fallback;
+  return Math.min(Math.floor(n), 500);
+}
+
 export const createServer = async (req: Request, res: Response) => {
   if (isCreatingServer) {
     return res.status(409).json({ error: "Server creation in progress, please try again in a few seconds." });
@@ -157,7 +192,7 @@ export const createServer = async (req: Request, res: Response) => {
   if (user.role !== "admin" && user.role !== "owner") {
     return res.status(403).json({ error: "Only admins can create servers" });
   }
-  let { name, ram, port, version, theme, cpu, disk, owner, ownerId, ipAlias, type, nodeId, runtimeType, javaVersion } = req.body;
+  let { name, ram, port, version, theme, cpu, disk, owner, ownerId, ipAlias, type, nodeId, runtimeType, javaVersion, databaseLimit, backupLimit } = req.body;
   const settings = await readJSON("settings.json") || {};
   const isDevPanel = (process.env.PANEL_TYPE === "dev" || process.env.PORT === "3000") && !process.env.FORCE_MAIN_PANEL;
   if (!isDevPanel) {
@@ -182,8 +217,14 @@ export const createServer = async (req: Request, res: Response) => {
     runtimeType: runtimeType || "docker",
     nodeId: nodeId || "local",
     type: type || "PAPER",
-    version: version || "26.3",
+    // Never invent a version: ask the same source the wizard lists. A hardcoded
+    // default went stale and every Minecraft deploy failed at download time.
+    version: version || (await getDefaultVersion(type || "PAPER")),
     javaVersion: javaVersion || "",
+    // Per-server quotas chosen in the deploy wizard's LIMITS step.
+    // Persisted here so createServerRuntime/databases/backups can enforce them.
+    databaseLimit: clampLimit(databaseLimit, 5),
+    backupLimit: clampLimit(backupLimit, 10),
     theme: theme || "default",
     status: "installing",
     createdAt: new Date().toISOString(),
@@ -209,13 +250,13 @@ export const createServer = async (req: Request, res: Response) => {
       const indexPath = path.join(serverDir, "index.js");
       const pkgPath = path.join(serverDir, "package.json");
       if (!fs.existsSync(indexPath)) {
-        await fs.writeFile(indexPath, `// Node.js Application on JTG Panel\nconst http = require('http');\nconst port = process.env.PORT || process.env.SERVER_PORT || ${port};\n\nconsole.log('==============================================');\nconsole.log('🚀 Node.js Application Running on port ' + port);\nconsole.log('Node Version: ' + process.version);\nconsole.log('Upload your files in File Manager to customize!');\nconsole.log('==============================================');\n\nconst server = http.createServer((req, res) => {\n  res.writeHead(200, { 'Content-Type': 'application/json' });\n  res.end(JSON.stringify({\n    status: 'online',\n    runtime: 'node.js',\n    time: new Date().toISOString()\n  }));\n});\n\nserver.listen(port, '0.0.0.0', () => {\n  console.log(\`[Server] Listening on http://0.0.0.0:\${port}\`);\n});\n`);
+        await fs.writeFile(indexPath, `// Node.js Application on IVM Panel\nconst http = require('http');\nconst port = process.env.PORT || process.env.SERVER_PORT || ${port};\n\nconsole.log('==============================================');\nconsole.log('🚀 Node.js Application Running on port ' + port);\nconsole.log('Node Version: ' + process.version);\nconsole.log('Upload your files in File Manager to customize!');\nconsole.log('==============================================');\n\nconst server = http.createServer((req, res) => {\n  res.writeHead(200, { 'Content-Type': 'application/json' });\n  res.end(JSON.stringify({\n    status: 'online',\n    runtime: 'node.js',\n    time: new Date().toISOString()\n  }));\n});\n\nserver.listen(port, '0.0.0.0', () => {\n  console.log(\`[Server] Listening on http://0.0.0.0:\${port}\`);\n});\n`);
       }
       if (!fs.existsSync(pkgPath)) {
         await fs.writeFile(pkgPath, JSON.stringify({
           name: name.toLowerCase().replace(/[^a-z0-9_-]/g, '-') || "node-app",
           version: "1.0.0",
-          description: "Node.js application hosted on JTG Panel",
+          description: "Node.js application hosted on IVM Panel",
           main: "index.js",
           scripts: {
             "start": "node index.js"
@@ -227,7 +268,7 @@ export const createServer = async (req: Request, res: Response) => {
       const mainPath = path.join(serverDir, "main.py");
       const reqPath = path.join(serverDir, "requirements.txt");
       if (!fs.existsSync(mainPath)) {
-        await fs.writeFile(mainPath, `# Python Application on JTG Panel\nimport os\nimport sys\nfrom http.server import HTTPServer, BaseHTTPRequestHandler\n\nport = int(os.environ.get("SERVER_PORT", os.environ.get("PORT", ${port})))\n\nprint("==============================================", flush=True)\nprint("🐍 Python Application Running", flush=True)\nprint(f"Python Version: {sys.version}", flush=True)\nprint(f"Listening Port: {port}", flush=True)\nprint("Upload your files in File Manager to customize!", flush=True)\nprint("==============================================", flush=True)\n\nclass RequestHandler(BaseHTTPRequestHandler):\n    def do_GET(self):\n        self.send_response(200)\n        self.send_header('Content-type', 'application/json')\n        self.end_headers()\n        self.wfile.write(b'{"status": "online", "runtime": "python"}')\n\n    def log_message(self, format, *args):\n        print(f"[{self.log_date_time_string()}] {format % args}", flush=True)\n\nserver = HTTPServer(('0.0.0.0', port), RequestHandler)\nprint(f"[Server] Listening on http://0.0.0.0:{port}", flush=True)\n\ntry:\n    server.serve_forever()\nexcept KeyboardInterrupt:\n    print("\\nStopping server...", flush=True)\n    server.server_close()\n`);
+        await fs.writeFile(mainPath, `# Python Application on IVM Panel\nimport os\nimport sys\nfrom http.server import HTTPServer, BaseHTTPRequestHandler\n\nport = int(os.environ.get("SERVER_PORT", os.environ.get("PORT", ${port})))\n\nprint("==============================================", flush=True)\nprint("🐍 Python Application Running", flush=True)\nprint(f"Python Version: {sys.version}", flush=True)\nprint(f"Listening Port: {port}", flush=True)\nprint("Upload your files in File Manager to customize!", flush=True)\nprint("==============================================", flush=True)\n\nclass RequestHandler(BaseHTTPRequestHandler):\n    def do_GET(self):\n        self.send_response(200)\n        self.send_header('Content-type', 'application/json')\n        self.end_headers()\n        self.wfile.write(b'{"status": "online", "runtime": "python"}')\n\n    def log_message(self, format, *args):\n        print(f"[{self.log_date_time_string()}] {format % args}", flush=True)\n\nserver = HTTPServer(('0.0.0.0', port), RequestHandler)\nprint(f"[Server] Listening on http://0.0.0.0:{port}", flush=True)\n\ntry:\n    server.serve_forever()\nexcept KeyboardInterrupt:\n    print("\\nStopping server...", flush=True)\n    server.server_close()\n`);
       }
       if (!fs.existsSync(reqPath)) {
         await fs.writeFile(reqPath, "# Add python dependencies here\n");
@@ -240,7 +281,7 @@ export const createServer = async (req: Request, res: Response) => {
       }
       const propsPath = path.join(serverDir, "server.properties");
       if (!fs.existsSync(propsPath)) {
-        await fs.writeFile(propsPath, `server-port=${port}\nquery.port=${port}\nenable-rcon=true\nrcon.port=${parseInt(port) + 10}\nrcon.password=admin\nmotd=A Minecraft Server on JTG Panel\n`);
+        await fs.writeFile(propsPath, `server-port=${port}\nquery.port=${port}\nenable-rcon=true\nrcon.port=${parseInt(port) + 10}\nrcon.password=admin\nmotd=A Minecraft Server on IVM Panel\n`);
       }
       const jarPath = path.join(serverDir, "server.jar");
       if (!fs.existsSync(jarPath)) {
@@ -330,7 +371,10 @@ export const deleteServer = async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Only admins can delete servers" });
     }
 
-    if (server.containerId) {
+    // Tear down whatever is actually running. Keying this off containerId alone
+    // skipped the local runtime entirely — and a server that fell back from
+    // docker to local has no containerId, so its process outlived the record.
+    if (hasRuntime(server)) {
       await deleteServerRuntime(server);
     }
     
@@ -440,9 +484,18 @@ export const startServer = async (req: Request, res: Response) => {
     const io = req.app.get("io");
     if (io) io.to(`server_${id}`).emit("clear_logs");
     
+    const runtimeBefore = server.runtimeType;
+    const containerBefore = server.containerId;
     try {
       await startServerRuntime(server);
     } catch (startErr: any) {
+      // The runtime can switch itself (docker -> local) when the host blocks
+      // containers. That decision is durable and must be persisted even if the
+      // fallback start *also* fails — otherwise the record keeps pointing at a
+      // container that has already been released.
+      if (server.runtimeType !== runtimeBefore || server.containerId !== containerBefore) {
+        await writeJSON("servers.json", servers);
+      }
       const startErrMsg = String(startErr?.message || startErr);
       if (startErrMsg.includes("ECONNREFUSED") || startErrMsg.includes("docker.sock")) {
         console.warn(`Docker daemon unreachable on /var/run/docker.sock (${startErrMsg}). Reverting server ${server.id} to fallback runtime.`);
@@ -495,7 +548,7 @@ export const stopServer = async (req: Request, res: Response) => {
   try {
     const servers = await readJSON("servers.json") || [];
     const server = servers.find((s: any) => s.id === id);
-    if (!server || !server.containerId) {
+    if (!server || !hasRuntime(server)) {
       return res.status(404).json({ error: "Server not found" });
     }
 
@@ -581,16 +634,18 @@ export const restartServer = async (req: Request, res: Response) => {
   }
   serverOperationLocks.add(id);
 
-  try {
-    const servers = await readJSON("servers.json") || [];
+  try {    const servers = await readJSON("servers.json") || [];
     const server = servers.find((s: any) => s.id === id);
-    if (!server || !server.containerId) {
+    if (!server || !hasRuntime(server)) {
       return res.status(404).json({ error: "Server not found" });
     }
 
     if (user.role !== "admin" && user.role !== "owner" && server.owner !== user.id) {
       return res.status(403).json({ error: "Forbidden: You do not have permission to manage this server" });
     }
+
+
+
 
     // Step 1: STOP
     try {
@@ -654,7 +709,7 @@ export const sendCommand = async (req: Request, res: Response) => {
 
     const servers = await readJSON("servers.json") || [];
     const server = servers.find((s: any) => s.id === id);
-    if (!server || !server.containerId) {
+    if (!server || !hasRuntime(server)) {
       return res.status(404).json({ error: "Server not found" });
     }
 
@@ -689,13 +744,13 @@ export const changeServerVersion = async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Only admins or owners can change version" });
     }
 
-    if (server.containerId) {
+    if (hasRuntime(server)) {
       const status = await getServerRuntimeStatus(server);
       if (status?.State?.Running) {
         return res.status(400).json({ error: "Server must be stopped before changing version. Please stop the server first." });
       }
-      // Delete old container
-      await deleteServerRuntime(server);
+      // Delete old container; the local runtime keeps its files.
+      if (server.runtimeType !== "local") await deleteServerRuntime(server);
     }
     
     // Automatically delete config files to avoid issues when switching versions/types
@@ -774,6 +829,36 @@ const checkServerFileAccess = async (req: Request, res: Response): Promise<boole
   }
   return true;
 };
+
+/**
+ * Resolve a caller-supplied relative path inside a server's directory.
+ *
+ * The old prefix check compared raw strings, so a sibling directory whose name
+ * merely *started with* the server id (…/servers/<id>-old/…) slipped through.
+ * Comparing against `base + separator` cannot be fooled that way, and resolving
+ * first means an absolute path can never escape either.
+ */
+function resolveInServerDir(serverId: string, relative: string): string | null {
+  const base = path.resolve(process.cwd(), ".data", "servers", serverId);
+  // The file manager speaks in server-rooted paths ("/server.properties"), and
+  // path.resolve would treat that leading slash as absolute and throw the base
+  // away, so the root marker is stripped first. ".." still escapes and is
+  // rejected by the containment check below.
+  const cleaned = String(relative || "").replace(/^[/\\]+/, "");
+  const target = path.resolve(base, cleaned || ".");
+  if (target !== base && !target.startsWith(base + path.sep)) return null;
+  return target;
+}
+
+/** Largest file we will hand to the browser for editing. */
+const MAX_EDIT_BYTES = 2 * 1024 * 1024;
+
+/** A NUL byte in the first block is the usual "this is not text" signal. */
+function looksBinary(buf: Buffer): boolean {
+  const window = buf.subarray(0, 8000);
+  for (const byte of window) if (byte === 0) return true;
+  return false;
+}
 
 // File manager basics
 export const getFiles = async (req: Request, res: Response) => {
@@ -1140,20 +1225,81 @@ export const createDirectory = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Read a text file for the editor. Returns metadata alongside the content so
+ * the UI can explain a refusal instead of rendering mojibake: binary files are
+ * reported rather than dumped, and oversized ones are clipped with a flag.
+ */
+export const readFileContent = async (req: Request, res: Response) => {
+  if (!(await checkServerFileAccess(req, res))) return;
+  const { id } = req.params;
+  const relative = req.query.path ? String(req.query.path) : "";
+  if (!relative) return res.status(400).json({ error: "No path specified" });
+
+  const targetPath = resolveInServerDir(id, relative);
+  if (!targetPath) return res.status(403).json({ error: "Invalid path" });
+
+  try {
+    const stat = await fs.stat(targetPath).catch(() => null);
+    if (!stat) return res.status(404).json({ error: "File not found" });
+    if (stat.isDirectory()) return res.status(400).json({ error: "That is a directory" });
+
+    const buffer = await fs.readFile(targetPath);
+    const binary = looksBinary(buffer);
+    const truncated = buffer.length > MAX_EDIT_BYTES;
+    const slice = truncated ? buffer.subarray(0, MAX_EDIT_BYTES) : buffer;
+
+    res.json({
+      path: relative,
+      name: path.basename(targetPath),
+      size: stat.size,
+      modified: stat.mtime.toISOString(),
+      binary,
+      truncated,
+      editableLimit: MAX_EDIT_BYTES,
+      content: binary ? null : slice.toString("utf-8"),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+};
+
 export const saveFileContent = async (req: Request, res: Response) => {
   if (!(await checkServerFileAccess(req, res))) return;
   const { id } = req.params;
   const { filePath, content } = req.body;
 
-  const targetPath = path.join(process.cwd(), ".data", "servers", id, filePath);
-
-  if (!targetPath.startsWith(path.join(process.cwd(), ".data", "servers", id))) {
-    return res.status(403).json({ error: "Invalid path" });
+  if (typeof filePath !== "string" || !filePath) {
+    return res.status(400).json({ error: "No path specified" });
+  }
+  if (typeof content !== "string") {
+    return res.status(400).json({ error: "Content must be text" });
+  }
+  if (Buffer.byteLength(content, "utf-8") > MAX_EDIT_BYTES) {
+    return res.status(413).json({
+      error: `File is larger than the ${Math.round(MAX_EDIT_BYTES / 1024 / 1024)} MB editing limit.`,
+    });
   }
 
+  const targetPath = resolveInServerDir(id, filePath);
+  if (!targetPath) return res.status(403).json({ error: "Invalid path" });
+
   try {
+    const stat = await fs.stat(targetPath).catch(() => null);
+    if (stat?.isDirectory()) {
+      return res.status(400).json({ error: "That is a directory" });
+    }
+
+    // Never let the editor create parent directories implicitly — a typo in a
+    // path should fail loudly rather than scatter files through the server.
+    const parent = path.dirname(targetPath);
+    if (!(await fs.pathExists(parent))) {
+      return res.status(404).json({ error: "Target directory does not exist" });
+    }
+
     await fs.writeFile(targetPath, content, "utf-8");
-    res.json({ success: true });
+    const saved = await fs.stat(targetPath);
+    res.json({ success: true, size: saved.size, modified: saved.mtime.toISOString() });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -1191,6 +1337,24 @@ export const createBackup = async (req: Request, res: Response) => {
   const serverDir = path.join(process.cwd(), ".data", "servers", id);
   const backupsDir = path.join(process.cwd(), ".data", "backups", id);
   await fs.ensureDir(backupsDir);
+
+  // Enforce the quota picked in the deploy wizard's LIMITS step. Without this
+  // the limit was stored but never applied, so a tenant could fill the disk.
+  const serversForLimit = (await readJSON("servers.json")) || [];
+  const serverForLimit: any = serversForLimit.find((s: any) => s.id === id);
+  const limit = clampLimit(serverForLimit?.backupLimit, 10);
+  const existing = (await fs.readdir(backupsDir)).filter((f: string) => f.endsWith(".zip"));
+  if (existing.length >= limit) {
+    return res.status(403).json({
+      error:
+        limit === 0
+          ? "Backups are disabled for this server."
+          : `Backup limit reached (${limit} allowed for this server). Delete an existing backup to create another.`,
+      code: "BACKUP_LIMIT_REACHED",
+      limit,
+      count: existing.length,
+    });
+  }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `backup-${timestamp}.zip`;
@@ -1276,7 +1440,7 @@ const downloadFileSafely = async (downloadUrl: string, targetDir: string, filena
       responseType: "stream",
       timeout: 60000,
       headers: {
-        "User-Agent": "JTG-Panel/1.0 (Minecraft Server Manager)"
+        "User-Agent": "IVM-Panel/1.0 (Minecraft Server Manager)"
       }
     });
 
@@ -1325,7 +1489,7 @@ const resolveModrinthVersionAndFile = async (
   // 2. If a specific version was chosen by the user
   if (specificVersionId) {
     const vRes = await axios.get(`https://api.modrinth.com/v2/version/${specificVersionId}`, {
-      headers: { "User-Agent": "JTG-Panel/1.0" }
+      headers: { "User-Agent": "IVM-Panel/1.0" }
     });
     if (vRes.data && vRes.data.files && vRes.data.files.length > 0) {
       const file = vRes.data.files.find((f: any) => f.primary) ||
@@ -1351,7 +1515,7 @@ const resolveModrinthVersionAndFile = async (
   }
 
   const verRes = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, {
-    headers: { "User-Agent": "JTG-Panel/1.0" }
+    headers: { "User-Agent": "IVM-Panel/1.0" }
   });
 
   const versions = verRes.data;
@@ -1664,7 +1828,7 @@ export const getModrinthProjectVersions = async (req: Request, res: Response) =>
 
   try {
     const resp = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, {
-      headers: { "User-Agent": "JTG-Panel/1.0" },
+      headers: { "User-Agent": "IVM-Panel/1.0" },
       timeout: 15000
     });
     res.json(resp.data);
@@ -1687,8 +1851,8 @@ export const updateResources = async (req: Request, res: Response) => {
     server.disk = Number(disk);
     await writeJSON("servers.json", servers);
 
-    // Stop container if running
-    if (server.containerId) {
+    // Stop the runtime if running
+    if (hasRuntime(server)) {
        try {
          await stopServerRuntime(server);
        } catch(e) {}
@@ -1713,7 +1877,7 @@ export const updateSuspend = async (req: Request, res: Response) => {
     server.suspendDuration = suspendDuration;
     await writeJSON("servers.json", servers);
 
-    if (server.suspended && server.containerId) {
+    if (server.suspended && hasRuntime(server)) {
        try {
          await stopServerRuntime(server);
        } catch(e) {}
@@ -1745,7 +1909,7 @@ export const updateRuntime = async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Only admins or owners can change runtime settings" });
     }
 
-    if (server.containerId) {
+    if (hasRuntime(server)) {
       const status = await getServerRuntimeStatus(server);
       if (status?.State?.Running) {
         return res.status(400).json({ error: "Server must be stopped before changing runtime. Please stop the server first." });
@@ -1785,8 +1949,8 @@ export const updateRuntime = async (req: Request, res: Response) => {
 
     servers[serverIndex] = server;
     
-    if (server.containerId) {
-       await deleteServerRuntime(server);
+    if (hasRuntime(server)) {
+       await releaseRuntimeForRebuild(server);
     }
     
     const newContainerId = await createServerRuntime(server);
@@ -1831,13 +1995,13 @@ export const migrateServerRuntime = async (req: Request, res: Response) => {
     }
 
     // Check if server is running
-    if (server.containerId) {
+    if (hasRuntime(server)) {
       const status = await getServerRuntimeStatus(server);
       if (status?.State?.Running) {
         return res.status(400).json({ error: "Server must be stopped before migrating runtime. Please stop the server first." });
       }
       // Clean up old runtime instance (container or local process state)
-      await deleteServerRuntime(server);
+      await releaseRuntimeForRebuild(server);
     }
 
     // Update runtime type

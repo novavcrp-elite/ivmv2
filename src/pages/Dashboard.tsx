@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Terminal, MapPin, ArrowUpRight, Shield, ChevronDown, ArrowRight, Server, Radio } from 'lucide-react';
+import { Terminal, MapPin, ArrowUpRight, Shield, ChevronDown, ArrowRight, Server, Radio, Cloud, Play, Square, RotateCw } from 'lucide-react';
+import axios from 'axios';
+import { VpsTools } from '../components/VpsTools';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
@@ -65,9 +67,24 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { servers: rawServers } = useDashboardData();
+
+  // VPS instances get the same Overview treatment as game servers.
+  const [vpsItems, setVpsItems] = useState<any[]>([]);
+  useEffect(() => {
+    axios.get('/api/vps').then((res) => setVpsItems(res.data.items || [])).catch(() => {});
+  }, []);
+  const vpsAction = async (id: string, action: 'start' | 'stop' | 'restart') => {
+    try {
+      await axios.post(`/api/vps/${id}/${action}`);
+      const res = await axios.get('/api/vps');
+      setVpsItems(res.data.items || []);
+    } catch {
+      // surfaced on the VPS page
+    }
+  };
   const realServers = Array.isArray(rawServers) ? rawServers : [];
   const { panelName } = useSettings();
-  const pName = panelName || 'JTG PANEL';
+  const pName = panelName || 'IVM PANEL';
   const nameParts = pName.split(' ');
   const firstWord = nameParts[0].toUpperCase();
   const restWords = nameParts.slice(1).join(' ').toUpperCase() || 'PANEL';
@@ -385,6 +402,124 @@ export default function Dashboard() {
 
         {/* 02 OPERATORS / OTHER SERVERS */}
         {(user?.role === 'admin' || user?.role === 'owner') && (
+        <>
+        <section id="vps" className="border-t border-theme-600/20 py-20 bg-zinc-950/50">
+          <div className="mx-auto max-w-7xl px-5 md:px-8">
+            <div className="mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="mb-3 flex items-center gap-2 font-mono text-[11px] tracking-[0.25em] text-dim uppercase">
+                  <Terminal className="h-3.5 w-3.5" /> // IVM.CORE — VIRTUAL SERVERS
+                </p>
+                <h2 className="font-display text-4xl font-bold uppercase tracking-tight text-white md:text-5xl">
+                  VPS Instances
+                </h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => navigate('/vps')} className="btn-outline px-4 py-2 text-xs">
+                  Manage all
+                </button>
+                <button onClick={() => navigate('/vps/deploy')} className="btn-primary px-4 py-2 text-xs">
+                  <Cloud className="h-4 w-4" /> Deploy VPS
+                </button>
+              </div>
+            </div>
+
+            {vpsItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 py-16 text-center">
+                <Cloud className="mb-3 h-10 w-10 text-white/30" />
+                <p className="text-sm text-white/50">No VPS instances yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {vpsItems.map((vps, i) => {
+                  const running = vps.status === 'RUNNING';
+                  const memGb = Math.round((vps.memoryMb || 0) / 1024);
+                  const live = vps.live || null;
+                  return (
+                    <article
+                      key={vps.id}
+                      className={`reveal group grid grid-cols-12 items-center gap-x-4 gap-y-4 rounded-xl p-5 transition-all duration-300 border qx-glass ${
+                        running
+                          ? 'hover:bg-zinc-900/70 border-theme-600/30 hover:border-theme-500/60 shadow-[0_0_20px_rgba(59,130,246,0.1)]'
+                          : 'hover:bg-zinc-900/50 border-theme-600/10'
+                      }`}
+                      style={{transitionDelay:`${i*90}ms`}}
+                    >
+                      <div className="col-span-2 md:col-span-1 font-display font-bold text-4xl md:text-5xl text-transparent bg-clip-text bg-gradient-to-br from-theme-500 via-zinc-300 to-zinc-400 group-hover:from-zinc-300 group-hover:to-theme-500 leading-none">
+                        {String(i + 1).padStart(2, '0')}
+                      </div>
+
+                      <div className="col-span-10 md:col-span-4 min-w-0">
+                        <h3 className="truncate font-display font-bold text-xl md:text-2xl tracking-tight text-white group-hover:text-zinc-300 group-hover:translate-x-1.5 transition-all duration-300">
+                          {vps.name}
+                        </h3>
+                        <p className="truncate font-mono text-[11px] text-zinc-100/70 tracking-wider mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <Cloud className="w-3.5 h-3.5 text-zinc-100 shrink-0" />
+                          <span>{vps.distro} {vps.release}</span>
+                          <span className="text-zinc-500">//</span>
+                          <span className="bg-theme-600/10 text-theme-300 px-2 py-0.5 rounded border border-theme-600/20">{vps.containerName}</span>
+                        </p>
+                      </div>
+
+                      <div className="col-span-6 md:col-span-3">
+                        {spark(i*7+1, 'var(--color-theme-500)')}
+                      </div>
+
+                      <div className="col-span-6 md:col-span-2">
+                        <div className="space-y-1.5 font-mono text-[10px] tracking-widest text-zinc-400">
+                          <p className="flex items-center justify-between"><span>vCPU</span><span className="text-zinc-100 font-bold">{vps.cpu}</span></p>
+                          <p className="flex items-center justify-between"><span>RAM</span><span className="text-zinc-100 font-bold">{memGb} GB</span></p>
+                          <p className="flex items-center justify-between"><span>DISK</span><span className="text-zinc-100 font-bold">{vps.diskGb} GB</span></p>
+                        </div>
+                      </div>
+
+                      <div className="col-span-12 md:col-span-2 flex items-center md:justify-end gap-4">
+                        <div className="text-left md:text-right">
+                          <p className="font-mono text-[10px] text-zinc-400 tracking-widest truncate max-w-[140px]">
+                            {live?.ipv4 || 'PRIVATE ADDRESS'}
+                          </p>
+                          <p className={`flex items-center gap-2 font-mono text-[11px] font-bold tracking-widest mt-1 ${running ? 'text-theme-500' : 'text-theme-400'}`}>
+                            <span className={`w-2 h-2 ${running ? 'bg-theme-500 pulse-dot shadow-[0_0_8px_var(--color-theme-500)]' : 'bg-theme-600'} rounded-full`}></span>
+                            {vps.status}
+                          </p>
+                        </div>
+                        <div className="w-8 h-8 rounded-lg bg-theme-600/10 border border-theme-600/20 flex items-center justify-center group-hover:bg-zinc-500/20 group-hover:border-zinc-100/40 transition-colors">
+                          <ArrowUpRight className="w-4 h-4 text-zinc-100 group-hover:text-theme-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all duration-300" />
+                        </div>
+                      </div>
+
+                      <div className="col-span-12 flex flex-wrap items-center gap-2 border-t border-theme-600/20 pt-4">
+                        {running ? (
+                          <button onClick={() => vpsAction(vps.id, 'stop')} className="btn-outline px-3 py-2 text-[10px]">
+                            <Square className="h-3.5 w-3.5" /> Stop
+                          </button>
+                        ) : (
+                          <button onClick={() => vpsAction(vps.id, 'start')} className="btn-outline px-3 py-2 text-[10px]">
+                            <Play className="h-3.5 w-3.5" /> Start
+                          </button>
+                        )}
+                        <button onClick={() => vpsAction(vps.id, 'restart')} className="btn-outline px-3 py-2 text-[10px]">
+                          <RotateCw className="h-3.5 w-3.5" /> Restart
+                        </button>
+                        <button
+                          onClick={() => navigate(`/vps/${vps.id}`)}
+                          className="btn-primary ml-auto px-3 py-2 text-[10px]"
+                        >
+                          Manage
+                        </button>
+                      </div>
+
+                      <div className="col-span-12">
+                        <VpsTools vps={vps} onChanged={() => vpsAction(vps.id, 'restart')} />
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
         <section id="users" className="border-t border-theme-800/20 py-20 bg-zinc-950/60">
             <div className="max-w-7xl mx-auto px-5 md:px-8">
                 <div className="flex items-center justify-between mb-6 reveal">
@@ -492,10 +627,9 @@ export default function Dashboard() {
                 </div>
             </div>
         </section>
+        </>
         )}
 
-
-        
         {/* 03 VISUAL FEED */}
         <section id="feed" className="border-t border-zinc-500/20 py-20 bg-zinc-950/80 overflow-hidden">
             <div className="max-w-7xl mx-auto px-5 md:px-8 mb-10 reveal active">

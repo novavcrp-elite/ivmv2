@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-const JWT_SECRET = process.env.JWT_SECRET || "jtg-panel-super-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "ivm-panel-super-secret";
 
 export const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -12,7 +12,7 @@ export const requireAdmin = async (req: Request, res: Response, next: NextFuncti
   const token = authHeader.split(" ")[1];
 
   // API Key Authentication
-  if (token.startsWith("jtg-") || token.startsWith("jtg_")) {
+  if (token.startsWith("ivm-") || token.startsWith("ivm_")) {
     try {
       const { readJSON, writeJSON } = await import("../services/db.js");
       const apiKeys = await readJSON("api_keys.json") || [];
@@ -55,11 +55,11 @@ export const requireAdmin = async (req: Request, res: Response, next: NextFuncti
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded.role !== 'admin' && decoded.role !== 'owner') {
-       res.status(403).json({ error: "Forbidden: Admin access only" });
-       return;
-    }
-    
+    // The database is the source of truth for the role. Tokens live for 7 days,
+    // so reading the role from the token would let a demoted/promoted account keep
+    // its old privileges (and show a stale role) until it logs in again.
+    let effectiveRole = decoded.role;
+
     if (decoded.id !== "temp-admin") {
       const { readJSON } = await import("../services/db.js");
       const users = await readJSON("users.json") || [];
@@ -72,9 +72,15 @@ export const requireAdmin = async (req: Request, res: Response, next: NextFuncti
         res.status(401).json({ error: "Session expired" });
         return;
       }
+      effectiveRole = user.role || decoded.role;
     }
-    
-    (req as any).user = decoded;
+
+    if (effectiveRole !== 'admin' && effectiveRole !== 'owner') {
+       res.status(403).json({ error: "Forbidden: Admin access only" });
+       return;
+    }
+
+    (req as any).user = { ...decoded, role: effectiveRole };
     next();
   } catch (err) {
     res.status(401).json({ error: "Invalid token" });
@@ -90,7 +96,7 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
   const token = authHeader.split(" ")[1];
 
   // API Key Authentication
-  if (token.startsWith("jtg-") || token.startsWith("jtg_")) {
+  if (token.startsWith("ivm-") || token.startsWith("ivm_")) {
     try {
       const { readJSON, writeJSON } = await import("../services/db.js");
       const apiKeys = await readJSON("api_keys.json") || [];
@@ -130,7 +136,9 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    
+
+    let effectiveRole = decoded.role;
+
     if (decoded.id !== "temp-admin") {
       const { readJSON } = await import("../services/db.js");
       const users = await readJSON("users.json") || [];
@@ -143,9 +151,10 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
         res.status(401).json({ error: "Session expired" });
         return;
       }
+      effectiveRole = user.role || decoded.role;
     }
-    
-    (req as any).user = decoded;
+
+    (req as any).user = { ...decoded, role: effectiveRole };
     next();
   } catch (err) {
     res.status(401).json({ error: "Invalid token" });

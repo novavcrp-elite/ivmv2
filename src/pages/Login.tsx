@@ -19,7 +19,7 @@ export default function Login() {
 
   const { login } = useAuth();
   const { 
-    panelName, enableLoginAnimation, enableRegistration,
+    panelName, panelLogo, enableLoginAnimation, enableRegistration,
     enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId,
     firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId
   } = useSettings();
@@ -32,7 +32,7 @@ export default function Login() {
       });
       if (enableLoginAnimation !== false) {
         // Cinematic Intro Sequence
-        gsap.set(".desert-wrapper", { backgroundColor: "#000" });
+        gsap.set(".river-wrapper", { backgroundColor: "#04141F" });
         gsap.set(".login-card", { autoAlpha: 0, y: 50 });
         gsap.set(".parallax-container", { scale: 1.1, opacity: 0 });
 
@@ -45,14 +45,14 @@ export default function Login() {
         shakeKeyframes.push({ x: 0, y: 0, rotation: 0, duration: 0.05 });
 
         tl.to(".parallax-container", { opacity: 1, duration: 3, ease: "power2.inOut" })
-          .to(".desert-wrapper", { backgroundColor: "#F7ABAE", duration: 1.5 }, "-=1.5")
+          .to(".river-wrapper", { backgroundColor: "#2C6C9B", duration: 1.5 }, "-=1.5")
           .to(".parallax-container", { scale: 1.3, transformOrigin: "center 35%", duration: 3, ease: "power2.inOut" }, "-=1")
           .to(".parallax-container", { scale: 1, duration: 0.5, ease: "power4.inOut" })
           .to(".parallax-container", { keyframes: shakeKeyframes, ease: "none" })
           .to(".login-card", { autoAlpha: 1, y: 0, duration: 1.2, ease: "power3.out" }, "+=0.2");
       } else {
         // Instant show
-        gsap.set(".desert-wrapper", { backgroundColor: "#F7ABAE" });
+        gsap.set(".river-wrapper", { backgroundColor: "#2C6C9B" });
         gsap.set(".login-card", { autoAlpha: 1, y: 0 });
         gsap.set(".parallax-container", { scale: 1, opacity: 1 });
         setIntroDone(true);
@@ -85,7 +85,7 @@ export default function Login() {
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!introDone) return;
     const x = (e.clientX / window.innerWidth - 0.5) * 2; // -1 to 1
-    const layers = [1, 2, 3, 4, 5, 6, 7];
+    const layers = [1, 2, 3, 4, 5, 6, 7, 8];
     layers.forEach((layerNum) => {
       const depth = layerNum * 10;
       gsap.to(`.layer-${layerNum}`, {
@@ -175,28 +175,29 @@ export default function Login() {
 
 
   return (
-    <div className="desert-wrapper" onMouseMove={handleMouseMove}>
+    <div className="river-wrapper" onMouseMove={handleMouseMove}>
       <div className="parallax-container">
-        <img src="/desert/img-bg.svg" alt="" className="parallax-layer layer-bg" />
-        <img src="/desert/img-1.svg" alt="" className="parallax-layer layer-1" />
-        <img src="/desert/img-2.svg" alt="" className="parallax-layer layer-2" />
-        <img src="/desert/img-3.svg" alt="" className="parallax-layer layer-3" />
+        <img src="/river/img-bg.svg" alt="" className="parallax-layer layer-bg" />
+        <img src="/river/img-1.svg" alt="" className="parallax-layer layer-1" />
+        <img src="/river/img-2.svg" alt="" className="parallax-layer layer-2" />
+        <img src="/river/img-3.svg" alt="" className="parallax-layer layer-3" />
         
         <div className="parallax-layer layer-text">
            <h1 className="background-title">{panelName}</h1>
-           <p className="background-subtitle">PANEL</p>
         </div>
 
-        <img src="/desert/img-4.svg" alt="" className="parallax-layer layer-4" />
-        <img src="/desert/img-5.svg" alt="" className="parallax-layer layer-5" />
-        <img src="/desert/img-6.svg" alt="" className="parallax-layer layer-6" />
-        <img src="/desert/img-7.svg" alt="" className="parallax-layer layer-7" />
+        <img src="/river/img-4.svg" alt="" className="parallax-layer layer-4" />
+        <img src="/river/img-5.svg" alt="" className="parallax-layer layer-5" />
+        <img src="/river/img-6.svg" alt="" className="parallax-layer layer-6" />
+        <img src="/river/img-7.svg" alt="" className="parallax-layer layer-7" />
+        <img src="/river/img-water.svg" alt="" className="parallax-layer layer-8" />
       </div>
 
       <div className="login-card">
-        <h2 className="login-title">{panelName} Login</h2>
-        <p className="login-subtitle">Welcome to the panel</p>
-        
+        {panelLogo && <img src={panelLogo} alt={panelName} className="login-logo" />}
+        {/* Panel name is only shown once, as the large backdrop title above. */}
+        <h2 className="sr-only">Sign in to {panelName}</h2>
+
         <form onSubmit={handleLogin} className="login-form">
           {error && <div className="login-error">{error}</div>}
           

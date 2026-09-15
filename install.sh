@@ -1,6 +1,6 @@
 #!/bin/bash
 # =========================================================
-# JTG Panel - Automated Installation & Management Script
+# IVM Panel - Automated Installation & Management Script
 # =========================================================
 
 # Ensure running in bash
@@ -20,11 +20,15 @@ NC='\033[0m'
 
 if [ -f "package.json" ]; then
     WORK_DIR="."
+elif [ -d "Ivm" ] && [ -f "Ivm/package.json" ]; then
+    WORK_DIR="Ivm"
 elif [ -d "Jtg" ] && [ -f "Jtg/package.json" ]; then
+    # legacy working directory from before the IVM rebrand
     WORK_DIR="Jtg"
 else
-    git clone https://github.com/JishnuTheGamer/Jtg Jtg 2>/dev/null || true
-    WORK_DIR="Jtg"
+    # upstream repository is still hosted under its original name
+    git clone https://github.com/JishnuTheGamer/Jtg Ivm 2>/dev/null || true
+    WORK_DIR="Ivm"
 fi
 cd "$WORK_DIR" || true
 
@@ -45,14 +49,14 @@ print_banner() {
     echo -e "${CYAN}${BOLD}"
     echo "╔══════════════════════════════════════════════╗"
     echo "║                                              ║"
-    echo "║     ██╗████████╗ ██████╗                     ║"
-    echo "║     ██║╚══██╔══╝██╔════╝                     ║"
-    echo "║     ██║   ██║   ██║  ███╗                    ║"
-    echo "║     ██║   ██║   ██║   ██║                    ║"
-    echo "║     ██║   ██║   ╚██████╔╝                    ║"
-    echo "║     ╚═╝   ╚═╝    ╚═════╝                     ║"
+    echo "║     ██╗ ██╗   ██╗ ███╗   ███╗                ║"
+    echo "║     ██║ ██║   ██║ ████╗ ████║                ║"
+    echo "║     ██║ ██║   ██║ ██╔████╔██║                ║"
+    echo "║     ██║ ╚██╗ ██╔╝ ██║╚██╔╝██║                ║"
+    echo "║     ██║  ╚████╔╝  ██║ ╚═╝ ██║                ║"
+    echo "║     ╚═╝   ╚═══╝   ╚═╝     ╚═╝                ║"
     echo "║                                              ║"
-    echo "║              JTG PANEL INSTALLER             ║"
+    echo "║              IVM PANEL INSTALLER             ║"
     echo "║                                              ║"
     echo "╚══════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -101,7 +105,7 @@ get_compose_cmd() {
 execute_step() {
     local msg="$1"
     shift
-    local step_id="jtg_step_$RANDOM"
+    local step_id="ivm_step_$RANDOM"
     local log_file="/tmp/${step_id}.log"
     rm -f "$log_file"
     
@@ -301,28 +305,6 @@ install_node() {
     return 0
 }
 
-install_java() {
-    if command -v java > /dev/null 2>&1 && java -version > /dev/null 2>&1; then
-        return 0
-    fi
-    echo "Installing Java (OpenJDK) for Minecraft runtime..."
-    if command -v apt-get > /dev/null 2>&1; then
-        sudo apt-get update -y -q > /dev/null 2>&1 || true
-        sudo apt-get install -y -q openjdk-21-jre-headless > /dev/null 2>&1 || \
-        sudo apt-get install -y -q openjdk-17-jre-headless > /dev/null 2>&1 || \
-        sudo apt-get install -y -q default-jre-headless > /dev/null 2>&1 || true
-    elif command -v dnf > /dev/null 2>&1; then
-        sudo dnf install -y java-21-openjdk-headless > /dev/null 2>&1 || sudo dnf install -y java-17-openjdk-headless > /dev/null 2>&1 || true
-    elif command -v yum > /dev/null 2>&1; then
-        sudo yum install -y java-21-openjdk-headless > /dev/null 2>&1 || sudo yum install -y java-17-openjdk-headless > /dev/null 2>&1 || true
-    elif command -v apk > /dev/null 2>&1; then
-        apk add --no-cache openjdk21-jre-headless > /dev/null 2>&1 || apk add --no-cache openjdk17-jre-headless > /dev/null 2>&1 || true
-    elif command -v pacman > /dev/null 2>&1; then
-        sudo pacman -Sy --noconfirm jre21-openjdk-headless > /dev/null 2>&1 || sudo pacman -Sy --noconfirm jre17-openjdk-headless > /dev/null 2>&1 || true
-    fi
-    return 0
-}
-
 setup_docker_env() {
     install_docker
     cat << 'EOF2' > Dockerfile
@@ -341,9 +323,9 @@ EOF2
         cat << 'EOF2' > docker-compose.yml
 version: '3.8'
 services:
-  jtg-main:
+  ivm-main:
     build: .
-    container_name: jtg-main
+    container_name: ivm-main
     restart: unless-stopped
     ports:
       - "6767:6767"
@@ -351,17 +333,17 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=6767
-      - JTG_HOST_DATA_PATH=${PWD}/.data
-      - JTG_OWNER_USER=${JTG_OWNER_USER:-}
-      - JTG_OWNER_PASS=${JTG_OWNER_PASS:-}
+      - IVM_HOST_DATA_PATH=${PWD}/.data
+      - IVM_OWNER_USER=${IVM_OWNER_USER:-}
+      - IVM_OWNER_PASS=${IVM_OWNER_PASS:-}
     volumes:
       - ./.data:/app/.data
       - ./backups:/app/backups
       - /var/run/docker.sock:/var/run/docker.sock
 
-  jtg-admin:
+  ivm-admin:
     build: .
-    container_name: jtg-admin
+    container_name: ivm-admin
     restart: unless-stopped
     command: npm run dev
     ports:
@@ -370,9 +352,9 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3000
-      - JTG_HOST_DATA_PATH=${PWD}/.data
-      - JTG_OWNER_USER=${JTG_OWNER_USER:-}
-      - JTG_OWNER_PASS=${JTG_OWNER_PASS:-}
+      - IVM_HOST_DATA_PATH=${PWD}/.data
+      - IVM_OWNER_USER=${IVM_OWNER_USER:-}
+      - IVM_OWNER_PASS=${IVM_OWNER_PASS:-}
     volumes:
       - ./.data:/app/.data
       - ./backups:/app/backups
@@ -384,10 +366,6 @@ EOF2
 setup_node_env() {
     local RUNTIME_PREF=$1
     install_node
-
-    if ! command -v pm2 &> /dev/null && [ ! -x "/usr/local/bin/pm2" ] && [ ! -x "./node_modules/.bin/pm2" ]; then
-        sudo npm install -g pm2 > /dev/null 2>&1 || npm install -g pm2 > /dev/null 2>&1 || npm install --save-dev pm2 > /dev/null 2>&1 || true
-    fi
     
     local DEFAULT_RT="docker"
     local ENABLE_DOCKER="true"
@@ -415,7 +393,7 @@ setup_node_env() {
 module.exports = {
   apps: [
     {
-      name: "jtg-main",
+      name: "ivm-main",
       script: "npm",
       args: "start",
       instances: 1,
@@ -431,7 +409,7 @@ module.exports = {
       }
     },
     {
-      name: "jtg-admin",
+      name: "ivm-admin",
       script: "npm",
       args: "run dev",
       instances: 1,
@@ -468,10 +446,10 @@ setup_owner() {
 
 setup_owner_docker() {
     local TARGET=$1
-    if [ -n "$JTG_OWNER_USER" ] && [ -n "$JTG_OWNER_PASS" ]; then
+    if [ -n "$IVM_OWNER_USER" ] && [ -n "$IVM_OWNER_PASS" ]; then
         local DOCKER_CLI=$(get_docker_cmd)
         sleep 2
-        $DOCKER_CLI exec -e JTG_OWNER_USER="$JTG_OWNER_USER" -e JTG_OWNER_PASS="$JTG_OWNER_PASS" "$TARGET" npm run createuser 2>&1 || {
+        $DOCKER_CLI exec -e IVM_OWNER_USER="$IVM_OWNER_USER" -e IVM_OWNER_PASS="$IVM_OWNER_PASS" "$TARGET" npm run createuser 2>&1 || {
             if command -v node &> /dev/null && [ -f "scripts/createuser.ts" ] && [ -d "node_modules" ]; then
                 npm run createuser 2>&1 || true
             fi
@@ -497,8 +475,8 @@ start_panel_docker() {
     # Free up port from PM2 if it was previously running under local Node.js
     if command -v pm2 &> /dev/null || [ -f "node_modules/.bin/pm2" ]; then
         run_pm2 delete "$TARGET" > /dev/null 2>&1 || true
-        if [ "$TARGET" = "jtg-main" ]; then
-            run_pm2 delete "jtg-panel" > /dev/null 2>&1 || true
+        if [ "$TARGET" = "ivm-main" ]; then
+            run_pm2 delete "ivm-panel" > /dev/null 2>&1 || true
         fi
     fi
 
@@ -549,11 +527,11 @@ start_panel_docker() {
 
 start_panel_node() {
     local TARGET=$1
-    if [ "$TARGET" = "jtg-main" ]; then
-        run_pm2 delete jtg-panel 2>/dev/null || true
+    if [ "$TARGET" = "ivm-main" ]; then
+        run_pm2 delete ivm-panel 2>/dev/null || true
         # Clean up conflicting Docker container if previously running via Docker
         local DOCKER_CLI=$(get_docker_cmd)
-        $DOCKER_CLI rm -f jtg-main jtg-panel 2>/dev/null || true
+        $DOCKER_CLI rm -f ivm-main ivm-panel 2>/dev/null || true
     fi
     # Ensure Docker daemon is running and socket accessible for Minecraft containers
     if command -v systemctl &> /dev/null; then
@@ -635,11 +613,11 @@ show_status() {
     local DEV_STATUS="OFF"
     local SFTP_STATUS="OFF"
     
-    if (run_pm2 list 2>/dev/null | grep "jtg-main" | grep -q "online") ||        (command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^jtg-main$") ||        curl -s -m 2 http://127.0.0.1:6767/api/health 2>/dev/null | grep -q "JTG Panel"; then
+    if (run_pm2 list 2>/dev/null | grep "ivm-main" | grep -q "online") ||        (command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^ivm-main$") ||        curl -s -m 2 http://127.0.0.1:6767/api/health 2>/dev/null | grep -q "IVM Panel"; then
         MAIN_STATUS="ONLINE"
     fi
     
-    if (run_pm2 list 2>/dev/null | grep "jtg-admin" | grep -q "online") ||        (command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^jtg-admin$") ||        curl -s -m 2 http://127.0.0.1:3000/api/health 2>/dev/null | grep -q "JTG Panel"; then
+    if (run_pm2 list 2>/dev/null | grep "ivm-admin" | grep -q "online") ||        (command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^ivm-admin$") ||        curl -s -m 2 http://127.0.0.1:3000/api/health 2>/dev/null | grep -q "IVM Panel"; then
         DEV_STATUS="ONLINE"
     fi
     
@@ -651,7 +629,7 @@ show_status() {
 
     echo -e "
 ${CYAN}${BOLD}╔══════════════════════════════════════════════╗"
-    echo -e "║              JTG PANEL STATUS                ║"
+    echo -e "║              IVM PANEL STATUS                ║"
     echo -e "╠══════════════════════════════════════════════╣${NC}"
     echo -e "║"
     if [ "$MAIN_STATUS" = "ONLINE" ]; then
@@ -680,12 +658,12 @@ install_panel() {
     local TARGET=$1
     local PANEL_NAME="Main Panel"
     local PORT="6767"
-    local SERVICE_NAME="jtg-main"
+    local SERVICE_NAME="ivm-main"
     
     if [ "$TARGET" = "dev" ]; then
         PANEL_NAME="Developer Panel"
         PORT="3000"
-        SERVICE_NAME="jtg-admin"
+        SERVICE_NAME="ivm-admin"
     fi
 
     print_banner
@@ -732,9 +710,9 @@ install_panel() {
         local OWNER_PASS=""
         local OWNER_PASS2=""
         
-        if [ -n "$JTG_OWNER_USER" ] && [ -n "$JTG_OWNER_PASS" ]; then
-            OWNER_USER="$JTG_OWNER_USER"
-            OWNER_PASS="$JTG_OWNER_PASS"
+        if [ -n "$IVM_OWNER_USER" ] && [ -n "$IVM_OWNER_PASS" ]; then
+            OWNER_USER="$IVM_OWNER_USER"
+            OWNER_PASS="$IVM_OWNER_PASS"
         elif [ ! -t 0 ]; then
             OWNER_USER="owner"
             OWNER_PASS="owner12345"
@@ -764,8 +742,8 @@ install_panel() {
         fi
         echo -e "╚══════════════════════════════════════════════╝"
         
-        export JTG_OWNER_USER="$OWNER_USER"
-        export JTG_OWNER_PASS="$OWNER_PASS"
+        export IVM_OWNER_USER="$OWNER_USER"
+        export IVM_OWNER_PASS="$OWNER_PASS"
     fi
     
     # Environment Setup
@@ -786,7 +764,6 @@ install_panel() {
 "
 
     execute_step "System Requirement Check" check_system_deps
-    execute_step "Java Runtime Environment" install_java
     
     if [ "$MODE_CHOICE" = "1" ] || [ "$MODE_CHOICE" = "2" ]; then
         local RUNTIME_ARG="docker"
@@ -798,12 +775,12 @@ install_panel() {
         if [ "$TARGET" = "main" ]; then
             execute_step "Owner Account Setup" setup_owner
             execute_step "Building Application" build_application
-            execute_step "Starting PM2 Service" start_panel_node jtg-main
-            execute_step "Waiting for Application & Port 6767" health_check 6767 pm2 jtg-main
+            execute_step "Starting PM2 Service" start_panel_node ivm-main
+            execute_step "Waiting for Application & Port 6767" health_check 6767 pm2 ivm-main
         else
             execute_step "Building Application" build_application
-            execute_step "Starting PM2 Service" start_panel_node jtg-admin
-            execute_step "Waiting for Application & Port 3000" health_check 3000 pm2 jtg-admin
+            execute_step "Starting PM2 Service" start_panel_node ivm-admin
+            execute_step "Waiting for Application & Port 3000" health_check 3000 pm2 ivm-admin
         fi
     fi
     
@@ -811,11 +788,11 @@ install_panel() {
 
     local IP=$(curl -s -m 2 ifconfig.me 2>/dev/null || curl -s -m 2 icanhazip.com 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
     if [ "$TARGET" = "main" ]; then
-        log_success "JTG Main Panel installation is complete and verified!"
+        log_success "IVM Main Panel installation is complete and verified!"
         echo -e "${GREEN}✓ You can now open http://${IP}:6767 and log in with '${OWNER_USER}'.${NC}
 "
     else
-        log_success "JTG Developer Panel installation is complete and verified!"
+        log_success "IVM Developer Panel installation is complete and verified!"
         echo -e "${GREEN}✓ Developer Panel running on http://${IP}:3000.${NC}
 "
     fi
@@ -862,8 +839,8 @@ create_owner_user() {
         fi
     done
     
-    export JTG_OWNER_USER="$OWNER_USER"
-    export JTG_OWNER_PASS="$OWNER_PASS"
+    export IVM_OWNER_USER="$OWNER_USER"
+    export IVM_OWNER_PASS="$OWNER_PASS"
     execute_step "Setting up Owner Account" setup_owner
     log_success "Owner user setup completed successfully!"
 }
@@ -889,9 +866,9 @@ while true; do
     print_banner
     echo -e "  ${BOLD}1)${NC} Initialize Main Panel"
     echo -e "  ${BOLD}2)${NC} Initialize Developer Panel"
-    echo -e "  ${BOLD}3)${NC} Update JTG Panel"
+    echo -e "  ${BOLD}3)${NC} Update IVM Panel"
     echo -e "  ${BOLD}4)${NC} Create Owner"
-    echo -e "  ${BOLD}5)${NC} Uninstall JTG Panel"
+    echo -e "  ${BOLD}5)${NC} Uninstall IVM Panel"
     echo -e "  ${BOLD}6)${NC} Exit"
     echo -e "\n========================================================"
     if ! read -p " Choose an option (1-6): " CHOICE; then

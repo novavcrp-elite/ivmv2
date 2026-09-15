@@ -1,0 +1,11 @@
+<svg width="2048" height="1373" viewBox="0 0 2048 1373" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="2048" height="1373" fill="url(#paint0_river_sky)"/>
+<defs>
+<linearGradient id="paint0_river_sky" x1="1024.17" y1="1385.42" x2="1024.17" y2="-2.43121" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FFE9C0"/>
+<stop offset="0.42" stop-color="#FFC98F"/>
+<stop offset="0.72" stop-color="#8FB6CE"/>
+<stop offset="1" stop-color="#2C6C9B"/>
+</linearGradient>
+</defs>
+</svg>

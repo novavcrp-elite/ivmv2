@@ -7,7 +7,8 @@ import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
-import { Check, Shield, User, Trash2, Layout, Upload, RefreshCw, Key, CheckCircle2, AlertCircle, Globe, Sparkles, ExternalLink, Cpu, Image, Settings, ArrowLeft, Menu, X, Lock } from "lucide-react";
+import { Check, Shield, User, Trash2, Layout, Upload, RefreshCw, Key, CheckCircle2, AlertCircle, Globe, Sparkles, ExternalLink, Cpu, Image, Settings, ArrowLeft, Menu, X, Lock, Save, Zap, Share2 } from "lucide-react";
+import { SharePanel } from "../components/SharePanel";
 import { Link } from "react-router-dom";
 import { ImageCropper } from "../components/ImageCropper";
 import { LoadingOverlay } from "../components/LoadingOverlay";
@@ -26,43 +27,22 @@ export default function AdminSettingsPage(): React.ReactElement {
     { id: "appearance", label: "Appearance", icon: <Image size={20} /> },
     { id: "auth", label: "Authentication", icon: <Key size={20} /> },
     { id: "users", label: "Users", icon: <User size={20} /> },
+    { id: "share", label: "Share", icon: <Share2 size={20} /> },
     { id: "system", label: "System", icon: <RefreshCw size={20} /> },
   ];
 
-  const scrollToTab = (id: string) => {
+  // One section is rendered at a time (visibility is handled by .admin-panes in
+  // index.css), so selecting a tab swaps the pane instead of scrolling the page.
+  const selectTab = (id: string) => {
     setActiveTab(id);
     setMobileOpen(false);
-    const element = document.getElementById(id);
-    const container = document.getElementById("settings-scroll-container");
-    if (element && container) {
-       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    document.getElementById("settings-scroll-container")?.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveTab(entry.target.id);
-          }
-        });
-      },
-      { root: document.getElementById("settings-scroll-container"), rootMargin: "-10% 0px -60% 0px", threshold: 0 }
-    );
-    
-    adminTabs.forEach((tab) => {
-      const el = document.getElementById(tab.id);
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   const { user, logout, updateUser } = useAuth();
   const { 
-    panelName, panelLogo, panelBackgroundImage, panelBackgroundBlur, 
-    enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, theme, setTheme, 
+    panelName, panelLogo, panelDescription, panelBackgroundImage, panelBackgroundBlur, 
+    enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, 
     enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId, 
     firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId, defaultRuntime, setDefaultRuntime,
     isDevPanel,
@@ -111,11 +91,11 @@ export default function AdminSettingsPage(): React.ReactElement {
     }
   };
   const [newPanelName, setNewPanelName] = useState(panelName);
+  const [newPanelDescription, setNewPanelDescription] = useState("");
   const [newEnablePlayit, setNewEnablePlayit] = useState(enablePlayit);
   const [newEnableTutorial, setNewEnableTutorial] = useState(enableTutorial);
   const [newEnableLoginAnimation, setNewEnableLoginAnimation] = useState(enableLoginAnimation);
   const [newEnableRegistration, setNewEnableRegistration] = useState(enableRegistration);
-  const [newTheme, setNewTheme] = useState(theme);
   const [newDefaultRuntime, setNewDefaultRuntime] = useState(defaultRuntime || 'docker');
   const [isUpdatingRuntime, setIsUpdatingRuntime] = useState(false);
   const [runtimeStatusMsg, setRuntimeStatusMsg] = useState<{ text: string; type: "success" | "error" | "warning" } | null>(null);
@@ -163,11 +143,11 @@ export default function AdminSettingsPage(): React.ReactElement {
 
   useEffect(() => {
     setNewPanelName(panelName);
+    setNewPanelDescription(panelDescription || "");
     setNewEnablePlayit(enablePlayit);
     setNewEnableTutorial(enableTutorial);
     setNewEnableLoginAnimation(enableLoginAnimation);
     setNewEnableRegistration(enableRegistration);
-    setNewTheme(theme);
     setFbEnableGoogleLogin(enableGoogleLogin || false);
     setFbApiKey(firebaseApiKey || "");
     setFbAuthDomain(firebaseAuthDomain || "");
@@ -177,7 +157,7 @@ export default function AdminSettingsPage(): React.ReactElement {
     setFbAppId(firebaseAppId || "");
     setCustomBgUrlInput(panelBackgroundImage || "");
     setNewDefaultRuntime(defaultRuntime || 'docker');
-  }, [defaultRuntime, panelName, panelBackgroundImage, enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, theme, setTheme, enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId, firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId]);
+  }, [defaultRuntime, panelName, panelDescription, panelBackgroundImage, enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId, firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId]);
 
   const handleSaveFirebaseSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -481,17 +461,18 @@ export default function AdminSettingsPage(): React.ReactElement {
           <button 
             type="submit" 
             disabled={isSavingFirebase}
-            className="bg-theme-600 hover:bg-amber-600 text-zinc-950 font-bold px-6 py-2.5 rounded-xl transition-all shadow-md active:scale-[0.98] disabled:opacity-50"
+            className="btn-primary px-6 py-2.5 text-xs"
           >
+            <Save className="h-4 w-4" />
             {isSavingFirebase ? "Saving Config..." : "Save Firebase Credentials"}
           </button>
 
           <button 
             type="button" 
             onClick={handleTestFirebaseConfig}
-            className="bg-muted hover:bg-muted/80 border border-border text-foreground font-semibold px-5 py-2.5 rounded-xl transition-all shadow-sm active:scale-[0.98]"
+            className="btn-outline px-5 py-2.5 text-xs"
           >
-            Test Connection
+            <Zap className="h-4 w-4" /> Test Connection
           </button>
         </div>
       </form>
@@ -512,7 +493,7 @@ export default function AdminSettingsPage(): React.ReactElement {
   }
 
   return (
-    <div className="flex h-[100dvh] w-full bg-transparent text-foreground font-sans overflow-hidden selection:bg-theme-600/30">
+    <div className="admin-convoy flex h-[100dvh] w-full bg-transparent text-foreground font-sans overflow-hidden selection:bg-theme-600/30">
       
       {/* Mobile Sidebar Overlay */}
       {mobileOpen && (
@@ -539,7 +520,7 @@ export default function AdminSettingsPage(): React.ReactElement {
                return (
                    <button
                        key={tab.id}
-                       onClick={() => scrollToTab(tab.id)}
+                       onClick={() => selectTab(tab.id)}
                        className={`relative flex w-full items-center px-3 py-3 rounded transition-colors group overflow-hidden`}
                    >
                        {isActive && (
@@ -590,7 +571,7 @@ export default function AdminSettingsPage(): React.ReactElement {
     
          <main id="settings-scroll-container" className="flex-1 w-full h-full relative z-0 overflow-x-hidden overflow-y-auto pb-safe custom-scrollbar p-4 sm:p-6 md:p-8">
             <div className="max-w-4xl mx-auto w-full pb-12">
-              <div className="flex flex-col gap-12 pt-4">
+              <div className="admin-panes flex flex-col gap-12 pt-4" data-active-tab={activeTab}>
 
                     <section id="branding" className="scroll-mt-24 bg-card border border-border-subtle rounded-2xl p-6 md:p-8 shadow-xl relative overflow-hidden">
                         <h2 className="text-xl font-bold mb-6 flex items-center text-foreground relative z-10">
@@ -602,7 +583,7 @@ export default function AdminSettingsPage(): React.ReactElement {
                   e.preventDefault();
                   setIsSavingSettings(true);
                   try {
-                    await axios.put("/api/system/settings", { panelName: newPanelName });
+                    await axios.put("/api/system/settings", { panelName: newPanelName, panelDescription: newPanelDescription });
                     fetchSettings();
                   } catch (err: any) {
                     alert(err.response?.data?.error || "Error updating settings");
@@ -612,16 +593,32 @@ export default function AdminSettingsPage(): React.ReactElement {
                 }}
               >
                 <label className="block text-sm font-medium text-muted-foreground mb-2">Panel Name</label>
-                <div className="flex gap-3">
-                  <input 
-                    required 
-                    value={newPanelName} 
-                    onChange={(e: any) => setNewPanelName(e.target.value)} 
-                    type="text" 
-                    placeholder="Enter panel name"
-                    className="flex-1 bg-muted border border-border focus:border-theme-600 focus:ring-1 focus:ring-theme-600/50 rounded-xl px-4 py-2.5 text-foreground transition-all shadow-inner outline-none"
-                  />
-                  <button disabled={isSavingSettings} type="submit" className="bg-theme-700 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-md active:scale-[0.98] whitespace-nowrap disabled:opacity-50">
+                <input 
+                  required 
+                  value={newPanelName} 
+                  onChange={(e: any) => setNewPanelName(e.target.value)} 
+                  type="text" 
+                  placeholder="Enter panel name"
+                  className="w-full bg-muted border border-border focus:border-theme-600 focus:ring-1 focus:ring-theme-600/50 rounded-xl px-4 py-2.5 text-foreground transition-all shadow-inner outline-none"
+                />
+
+                <label className="block text-sm font-medium text-muted-foreground mb-2 mt-6">Link Preview Description</label>
+                <textarea
+                  value={newPanelDescription}
+                  onChange={(e: any) => setNewPanelDescription(e.target.value)}
+                  rows={3}
+                  maxLength={400}
+                  placeholder="A web-based game & VPS server management panel with file manager, web terminal and playit.gg integration."
+                  className="w-full bg-muted border border-border focus:border-theme-600 focus:ring-1 focus:ring-theme-600/50 rounded-xl px-4 py-2.5 text-foreground transition-all shadow-inner outline-none resize-y"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Shown by Discord, WhatsApp and Telegram when someone pastes the panel URL. Left empty, the panel uses
+                  its built-in description.
+                </p>
+
+                <div className="mt-5 flex justify-end">
+                  <button disabled={isSavingSettings} type="submit" className="btn-primary px-6 py-2.5 text-xs whitespace-nowrap">
+                    <Save className="h-4 w-4" />
                     {isSavingSettings ? "Saving..." : "Save"}
                   </button>
                 </div>
@@ -845,7 +842,7 @@ export default function AdminSettingsPage(): React.ReactElement {
                                 setNewDefaultRuntime("docker");
                                 if (setDefaultRuntime) setDefaultRuntime("docker");
                                 try {
-                                  const token = localStorage.getItem("jtg_token") || localStorage.getItem("token");
+                                  const token = localStorage.getItem("ivm_token") || localStorage.getItem("token");
                                   const headers: any = {};
                                   if (token) headers["Authorization"] = `Bearer ${token}`;
                                   await axios.put("/api/system/settings", { defaultRuntime: "docker" }, { headers });
@@ -904,7 +901,7 @@ export default function AdminSettingsPage(): React.ReactElement {
                                 setNewDefaultRuntime("local");
                                 if (setDefaultRuntime) setDefaultRuntime("local");
                                 try {
-                                  const token = localStorage.getItem("jtg_token") || localStorage.getItem("token");
+                                  const token = localStorage.getItem("ivm_token") || localStorage.getItem("token");
                                   const headers: any = {};
                                   if (token) headers["Authorization"] = `Bearer ${token}`;
                                   await axios.put("/api/system/settings", { defaultRuntime: "local" }, { headers });
@@ -1052,36 +1049,6 @@ export default function AdminSettingsPage(): React.ReactElement {
                   </div>
                 </div>
 
-                
-                  {/* Theme Selector */}
-                  <div className="pt-6 border-t border-border-subtle mt-6">
-                    <label className="block text-sm font-medium text-muted-foreground mb-3">Accent Color Theme</label>
-                    <div className="flex flex-wrap gap-3">
-                      {[
-                        { name: "red", color: "#ef4444" },
-                        { name: "blue", color: "#3b82f6" },
-                        { name: "orange", color: "#f97316" },
-                        { name: "green", color: "#10b981" },
-                        { name: "white", color: "#e4e4e7" }
-                      ].map(t => (
-                        <button
-                          key={t.name}
-                          onClick={async () => {
-                            try {
-                              setTheme(t.name);
-                              document.documentElement.setAttribute('data-theme', t.name);
-                              await axios.put("/api/system/settings", { theme: t.name });
-                            } catch(e) {}
-                          }}
-                          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${theme === t.name ? 'ring-2 ring-offset-2 ring-offset-card ring-theme-500 scale-110' : 'opacity-70 hover:opacity-100 hover:scale-105'}`}
-                          style={{ backgroundColor: t.color }}
-                          title={t.name.charAt(0).toUpperCase() + t.name.slice(1)}
-                        >
-                           {theme === t.name && <Check size={16} className={t.name === 'white' ? 'text-zinc-900' : 'text-white'} />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
                 {/* Right Column: Blur Slider & Presets */}
                 <div className="space-y-6 flex flex-col justify-between">
@@ -1119,7 +1086,7 @@ export default function AdminSettingsPage(): React.ReactElement {
                     />
                   </div>
                   
-                  {/* Preset Themes */}
+                  {/* Quick wallpaper presets (backgrounds, not accent colours) */}
                   <div className="space-y-3 pt-2 border-t border-border-subtle">
                     <label className="block text-xs font-bold text-muted-foreground uppercase tracking-widest">Quick Wallpaper Presets</label>
                     <div className="grid grid-cols-2 gap-2">
@@ -1189,6 +1156,16 @@ export default function AdminSettingsPage(): React.ReactElement {
 
         
 
+                    <section id="share" className="scroll-mt-24 bg-card border border-border-subtle rounded-2xl p-6 md:p-8 shadow-xl relative overflow-hidden">
+                        <h2 className="text-xl font-bold mb-1 flex items-center text-foreground">
+                            <Share2 className="mr-3 text-theme-500 w-5 h-5" /> Share &amp; Invite
+                        </h2>
+                        <p className="mb-6 text-sm text-muted-foreground">
+                            A ready-to-paste description of this panel for Discord, WhatsApp, Telegram or anywhere else.
+                        </p>
+                        <SharePanel />
+                    </section>
+
                     <section id="system" className="scroll-mt-24 bg-card border border-border-subtle rounded-2xl p-6 md:p-8 shadow-xl">
                         <h2 className="text-xl font-bold mb-4 flex items-center text-foreground">
               <RefreshCw className="mr-3 text-theme-500 w-5 h-5" /> System Update
@@ -1213,7 +1190,7 @@ export default function AdminSettingsPage(): React.ReactElement {
                 </div>
               </div>
               <p className="text-muted-foreground text-sm mb-6 max-w-2xl">
-                Trigger an automatic update of the JTG Panel. This will run git pull and rebuild the system. The panel will be unavailable for a few seconds during this process.
+                Trigger an automatic update of the IVM Panel. This will run git pull and rebuild the system. The panel will be unavailable for a few seconds during this process.
               </p>
               <button 
                 onClick={handleSystemUpdate}

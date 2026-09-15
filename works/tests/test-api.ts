@@ -1,7 +1,7 @@
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
-const token = jwt.sign({ id: 'dev-user-klgaj6ons', role: 'admin' }, process.env.JWT_SECRET || 'jtg-panel-super-secret');
+const token = jwt.sign({ id: 'dev-user-klgaj6ons', role: 'admin' }, process.env.JWT_SECRET || 'ivm-panel-super-secret');
 
 async function run() {
   const api = axios.create({ baseURL: 'http://127.0.0.1:3000/api', headers: { Authorization: `Bearer ${token}` } });

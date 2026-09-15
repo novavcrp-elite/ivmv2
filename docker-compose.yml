@@ -1,8 +1,8 @@
 version: '3.8'
 services:
-  jtg-main:
+  ivm-main:
     build: .
-    container_name: jtg-main
+    container_name: ivm-main
     restart: unless-stopped
     ports:
       - "6767:6767"
@@ -12,17 +12,17 @@ services:
       - PORT=6767
       - ENABLE_DOCKER=true
       - DOCKER_SOCKET_PATH=/var/run/docker.sock
-      - JTG_HOST_DATA_PATH=${PWD}/.data
-      - JTG_OWNER_USER=${JTG_OWNER_USER:-}
-      - JTG_OWNER_PASS=${JTG_OWNER_PASS:-}
+      - IVM_HOST_DATA_PATH=${PWD}/.data
+      - IVM_OWNER_USER=${IVM_OWNER_USER:-}
+      - IVM_OWNER_PASS=${IVM_OWNER_PASS:-}
     volumes:
       - ./.data:/app/.data
       - ./backups:/app/backups
       - /var/run/docker.sock:/var/run/docker.sock
 
-  jtg-admin:
+  ivm-admin:
     build: .
-    container_name: jtg-admin
+    container_name: ivm-admin
     restart: unless-stopped
     command: npm run dev
     ports:
@@ -33,9 +33,9 @@ services:
       - PORT=3000
       - ENABLE_DOCKER=true
       - DOCKER_SOCKET_PATH=/var/run/docker.sock
-      - JTG_HOST_DATA_PATH=${PWD}/.data
-      - JTG_OWNER_USER=${JTG_OWNER_USER:-}
-      - JTG_OWNER_PASS=${JTG_OWNER_PASS:-}
+      - IVM_HOST_DATA_PATH=${PWD}/.data
+      - IVM_OWNER_USER=${IVM_OWNER_USER:-}
+      - IVM_OWNER_PASS=${IVM_OWNER_PASS:-}
     volumes:
       - ./.data:/app/.data
       - ./backups:/app/backups

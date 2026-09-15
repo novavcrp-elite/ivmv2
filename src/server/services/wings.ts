@@ -49,7 +49,7 @@ export class WingsRuntimeProvider implements GameServerRuntimeProvider {
     if (!node) throw new Error("Node not found");
     const client = getWingsClient(node);
 
-    const effectiveJava = server.javaVersion || getJavaVersionForMinecraft(server.version || "26.3", server.type);
+    const effectiveJava = server.javaVersion || getJavaVersionForMinecraft(server.version || "26.2", server.type);
     const javaVersion = `java_${effectiveJava}`;
 
     const image = server.dockerImage || `ghcr.io/pterodactyl/yolks:${javaVersion}`;
@@ -58,7 +58,7 @@ export class WingsRuntimeProvider implements GameServerRuntimeProvider {
       uuid: server.id,
       meta: {
         name: server.name || "Minecraft Server",
-        description: "JTG Managed Server"
+        description: "IVM Managed Server"
       },
       suspended: false,
       environment: {

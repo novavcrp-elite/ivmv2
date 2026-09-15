@@ -87,7 +87,7 @@ export default function ModrinthVersionModal({
         // Fallback to direct public Modrinth API call
         try {
           const directRes = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, {
-            headers: { "User-Agent": "JTG-Panel/1.0" }
+            headers: { "User-Agent": "IVM-Panel/1.0" }
           });
           if (isMounted && Array.isArray(directRes.data)) {
             setVersions(directRes.data);

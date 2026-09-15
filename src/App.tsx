@@ -18,6 +18,11 @@ import ApiKeysPage from "./pages/ApiKeysPage";
 import AdminServers from "./pages/AdminServers";
 import PlayitTunnel from "./pages/PlayitTunnel";
 import Nodes from "./pages/Nodes";
+import VpsServers from "./pages/VpsServers";
+import DeployVps from "./pages/DeployVps";
+import VpsDetail from "./pages/VpsDetail";
+import Databases from "./pages/Databases";
+import DatabaseHosts from "./pages/DatabaseHosts";
 import Layout from "./components/Layout";
 import { motion, AnimatePresence } from "framer-motion";
 import { SettingsProvider, useSettings } from "./context/SettingsContext";
@@ -41,6 +46,25 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <Layout>{children}</Layout>;
 };
 
+// Node management, fleet control, API keys and panel settings are admin/owner only.
+// The API rejects these actions with 403, but hiding the routes keeps a regular
+// user from reaching (and mistakenly "completing") forms they can never submit.
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return (
+    <div className="h-[100dvh] w-full flex items-center justify-center bg-transparent text-foreground">
+      <motion.div
+        animate={{ scale: [1, 1.2, 1], rotate: [0, 180, 360] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+        className="w-16 h-16 border-4 border-theme-600 border-t-transparent rounded-full"
+      />
+    </div>
+  );
+  if (!user) return <Navigate to="/login" />;
+  if (user.role !== "admin" && user.role !== "owner") return <Navigate to="/" replace />;
+  return <Layout>{children}</Layout>;
+};
+
 const AnimatedRoutes = () => {
   const location = useLocation();
   return (
@@ -57,14 +81,19 @@ const AnimatedRoutes = () => {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/nodes" element={<ProtectedRoute><Nodes /></ProtectedRoute>} />
+          <Route path="/nodes" element={<AdminRoute><Nodes /></AdminRoute>} />
+          <Route path="/vps" element={<AdminRoute><VpsServers /></AdminRoute>} />
+          <Route path="/vps/deploy" element={<AdminRoute><DeployVps /></AdminRoute>} />
+          <Route path="/vps/:id" element={<AdminRoute><VpsDetail /></AdminRoute>} />
+          <Route path="/databases" element={<ProtectedRoute><Databases /></ProtectedRoute>} />
+          <Route path="/databases/hosts" element={<AdminRoute><DatabaseHosts /></AdminRoute>} />
           <Route path="/servers" element={<ProtectedRoute><ServerList /></ProtectedRoute>} />
-          <Route path="/servers/create" element={<ProtectedRoute><CreateServer /></ProtectedRoute>} />
+          <Route path="/servers/create" element={<AdminRoute><CreateServer /></AdminRoute>} />
           <Route path="/servers/:id/*" element={<ProtectedRoute><ServerView /></ProtectedRoute>} />
           <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
-          <Route path="/admin/settings" element={<ProtectedRoute><AdminSettingsPage /></ProtectedRoute>} />
-          <Route path="/api-keys" element={<ProtectedRoute><ApiKeysPage /></ProtectedRoute>} />
-          <Route path="/admin/servers" element={<ProtectedRoute><AdminServers /></ProtectedRoute>} />
+          <Route path="/admin/settings" element={<AdminRoute><AdminSettingsPage /></AdminRoute>} />
+          <Route path="/api-keys" element={<AdminRoute><ApiKeysPage /></AdminRoute>} />
+          <Route path="/admin/servers" element={<AdminRoute><AdminServers /></AdminRoute>} />
         </Routes>
       </motion.div>
     </AnimatePresence>

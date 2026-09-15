@@ -62,7 +62,7 @@ const StatCard = ({ icon, label, value, dim }: any) => (
   </div>
 );
 
-const ChartCard = ({ title, data, dataKey, dataKey2, max, icons }: any) => {
+const ChartCard = ({ title, data, dataKey, dataKey2, max, icons, unavailable }: any) => {
   const chartData = useMemo(() => {
     let d = [...data];
     while (d.length < 30) {
@@ -78,6 +78,14 @@ const ChartCard = ({ title, data, dataKey, dataKey2, max, icons }: any) => {
         {icons && <div className="flex gap-[9px] items-center">{icons}</div>}
       </div>
       <div className="relative h-[190px]">
+        {unavailable ? (
+          // Some runtimes genuinely cannot report a metric (a host process has no
+          // network namespace). Saying so beats a flat line at zero, which reads
+          // as "the server is doing nothing" instead of "we cannot measure this".
+          <div className="h-full grid place-items-center px-4 text-center text-[12px] leading-relaxed text-white/40">
+            {unavailable}
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 0, left: 0, right: 0, bottom: 0 }}>
             <defs>
@@ -115,6 +123,7 @@ const ChartCard = ({ title, data, dataKey, dataKey2, max, icons }: any) => {
             )}
           </AreaChart>
         </ResponsiveContainer>
+        )}
       </div>
     </div>
   );
@@ -143,7 +152,8 @@ export default function ServerConsole({ serverId, server }: ServerConsoleProps) 
   const sockRef = useRef<Socket | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const prevNetRef = useRef({ netIn: 0, netOut: 0, timestamp: 0 });
+  const prevNetRef = useRef<{ netIn: number | null; netOut: number | null; timestamp: number }>({ netIn: null, netOut: null, timestamp: 0 });
+  const [netAvailable, setNetAvailable] = useState(false);
   const isVisible = useRef(true);
   const isTouchingRef = useRef(false);
   const scrollTimeoutRef = useRef<any>(null);
@@ -310,12 +320,17 @@ export default function ServerConsole({ serverId, server }: ServerConsoleProps) 
           setRamHist((h) => [...h, { ram: data.ram ?? 0 }].slice(-SPARK_CAP));
           
           const now = Date.now();
-          if (prevNetRef.current.timestamp > 0 && data.netIn !== undefined && data.netOut !== undefined) {
+          const netIn = typeof data.netIn === "number" ? data.netIn : null;
+          const netOut = typeof data.netOut === "number" ? data.netOut : null;
+          const netReadable = netIn !== null && netOut !== null;
+          setNetAvailable(netReadable);
+
+          if (netReadable && prevNetRef.current.timestamp > 0 && prevNetRef.current.netIn !== null && prevNetRef.current.netOut !== null) {
             const elapsedSeconds = (now - prevNetRef.current.timestamp) / 1000;
             // Handle restart or counter reset
-            if (data.netIn >= prevNetRef.current.netIn && data.netOut >= prevNetRef.current.netOut) {
-                const inRate = Math.max(0, data.netIn - prevNetRef.current.netIn) / elapsedSeconds;
-                const outRate = Math.max(0, data.netOut - prevNetRef.current.netOut) / elapsedSeconds;
+            if (netIn >= prevNetRef.current.netIn && netOut >= prevNetRef.current.netOut) {
+                const inRate = Math.max(0, netIn - prevNetRef.current.netIn) / elapsedSeconds;
+                const outRate = Math.max(0, netOut - prevNetRef.current.netOut) / elapsedSeconds;
                 setNetRates({ in: inRate, out: outRate });
                 setNetHist((h) => [...h, { netIn: inRate / 1024, netOut: outRate / 1024 }].slice(-SPARK_CAP)); // Save in KB/s for chart
             } else {
@@ -323,7 +338,7 @@ export default function ServerConsole({ serverId, server }: ServerConsoleProps) 
                 setNetHist((h) => [...h, { netIn: 0, netOut: 0 }].slice(-SPARK_CAP));
             }
           }
-          prevNetRef.current = { netIn: data.netIn || 0, netOut: data.netOut || 0, timestamp: now };
+          prevNetRef.current = { netIn, netOut, timestamp: now };
         }
       } catch { 
          failCount++;
@@ -556,8 +571,8 @@ export default function ServerConsole({ serverId, server }: ServerConsoleProps) 
           <StatCard icon={<Cpu style={{width: 62, height: 62}} />} label="CPU Load" value={isOnline ? `${stats.cpu.toFixed(2)}%` : '—'} dim={isOnline ? `/ ${stats.limitCpu}%` : ''} />
           <StatCard icon={<MemoryIcon style={{width: 62, height: 62}} />} label="Memory" value={isOnline ? formatSize(stats.ram) : '—'} dim={isOnline ? `/ ${formatSize(stats.limitRam)}` : ''} />
           <StatCard icon={<HardDrive style={{width: 62, height: 62}} />} label="Disk" value={isOnline ? formatSize(stats.disk) : '—'} dim={`/ ${formatSize(stats.limitDisk)}`} />
-          <StatCard icon={<ArrowDown style={{width: 62, height: 62}} />} label="Network (Inbound)" value={isOnline ? `↓ ${formatRate(netRates.in)}` : '—'} />
-          <StatCard icon={<ArrowUp style={{width: 62, height: 62}} />} label="Network (Outbound)" value={isOnline ? `↑ ${formatRate(netRates.out)}` : '—'} />
+          <StatCard icon={<ArrowDown style={{width: 62, height: 62}} />} label="Network (Inbound)" value={isOnline && netAvailable ? `↓ ${formatRate(netRates.in)}` : '—'} />
+          <StatCard icon={<ArrowUp style={{width: 62, height: 62}} />} label="Network (Outbound)" value={isOnline && netAvailable ? `↑ ${formatRate(netRates.out)}` : '—'} />
         </div>
       </div>
 
@@ -565,7 +580,17 @@ export default function ServerConsole({ serverId, server }: ServerConsoleProps) 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[22px] animate-[rise_.5s_ease_.24s_both]">
          <ChartCard title="CPU Load (%)" data={cpuHist} dataKey="cpu" max={stats.limitCpu} />
          <ChartCard title="Memory (MB)" data={ramHist} dataKey="ram" max={stats.limitRam} />
-         <ChartCard title="Network (KB/s)" data={netHist} dataKey="netIn" dataKey2="netOut" max={100} icons={<><ArrowDown className="w-3 h-3 text-[#22d3ee]"/><ArrowUp className="w-3 h-3 text-[#e8bd15]"/></>} />
+         <ChartCard
+           title="Network (KB/s)"
+           data={netHist}
+           dataKey="netIn"
+           dataKey2="netOut"
+           max={100}
+           icons={<><ArrowDown className="w-3 h-3 text-[#22d3ee]"/><ArrowUp className="w-3 h-3 text-[#e8bd15]"/></>}
+           unavailable={!isOnline ? undefined : netAvailable ? undefined : (
+             <>Network is not measurable for this server's runtime.<br/>A host process has no network interface of its own.</>
+           )}
+         />
       </div>
       </div>
     </div>

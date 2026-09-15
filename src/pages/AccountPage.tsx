@@ -19,7 +19,7 @@ export default function AccountPage(): React.ReactElement {
   const { user, logout, updateUser } = useAuth();
   const { 
     panelName, panelLogo, panelBackgroundImage, panelBackgroundBlur, 
-    enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, theme, 
+    enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, 
     enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId, 
     firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId, defaultRuntime, 
     fetchSettings 
@@ -71,7 +71,6 @@ export default function AccountPage(): React.ReactElement {
   const [newEnableTutorial, setNewEnableTutorial] = useState(enableTutorial);
   const [newEnableLoginAnimation, setNewEnableLoginAnimation] = useState(enableLoginAnimation);
   const [newEnableRegistration, setNewEnableRegistration] = useState(enableRegistration);
-  const [newTheme, setNewTheme] = useState(theme);
   const [newDefaultRuntime, setNewDefaultRuntime] = useState(defaultRuntime || 'docker');
 
   // Firebase Config Local State
@@ -121,7 +120,6 @@ export default function AccountPage(): React.ReactElement {
     setNewEnableTutorial(enableTutorial);
     setNewEnableLoginAnimation(enableLoginAnimation);
     setNewEnableRegistration(enableRegistration);
-    setNewTheme(theme);
     setFbEnableGoogleLogin(enableGoogleLogin || false);
     setFbApiKey(firebaseApiKey || "");
     setFbAuthDomain(firebaseAuthDomain || "");
@@ -131,7 +129,7 @@ export default function AccountPage(): React.ReactElement {
     setFbAppId(firebaseAppId || "");
     setCustomBgUrlInput(panelBackgroundImage || "");
     setNewDefaultRuntime(defaultRuntime || 'docker');
-  }, [defaultRuntime, panelName, panelBackgroundImage, enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, theme, enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId, firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId]);
+  }, [defaultRuntime, panelName, panelBackgroundImage, enablePlayit, enableTutorial, enableLoginAnimation, enableRegistration, enableGoogleLogin, firebaseApiKey, firebaseAuthDomain, firebaseProjectId, firebaseStorageBucket, firebaseMessagingSenderId, firebaseAppId]);
 
   const handleSaveFirebaseSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();

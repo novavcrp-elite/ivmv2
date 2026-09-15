@@ -96,23 +96,29 @@ const RAM = [
 ];
 const CPU_MAP: Record<number, number> = {1:100,2:100,4:150,8:200,16:300,24:400,32:500,48:700,64:800};
 
+// Each engine carries the project's own logo where one exists; the lucide glyph
+// stays as the fallback (and is the only mark for BungeeCord, which publishes
+// no standalone badge).
 const MINECRAFT_SOFTWARE = [
-  {id:'paper',name:'Paper',desc:'High Performance',icon: Zap},
-  {id:'spigot',name:'Spigot',desc:'Classic Plugins',icon: Wrench},
-  {id:'fabric',name:'Fabric',desc:'Lightweight Mods',icon: Feather},
-  {id:'forge',name:'Forge',desc:'Classic Modpack',icon: Wrench},
-  {id:'bungeecord',name:'BungeeCord',desc:'Classic Proxy',icon: Network},
-  {id:'velocity',name:'Velocity',desc:'Next-gen Proxy',icon: FastForward}
+  {id:'paper',name:'Paper',desc:'High Performance',icon: Zap, logoSrc:'/icons/paper.png'},
+  {id:'spigot',name:'Spigot',desc:'Classic Plugins',icon: Wrench, logoSrc:'/icons/spigot.png'},
+  {id:'fabric',name:'Fabric',desc:'Lightweight Mods',icon: Feather, logoSrc:'/icons/fabric.png'},
+  {id:'forge',name:'Forge',desc:'Classic Modpack',icon: Wrench, logoSrc:'/icons/forge.jpg'},
+  {id:'bungeecord',name:'BungeeCord',desc:'Classic Proxy',icon: Network, logoSrc:''},
+  {id:'velocity',name:'Velocity',desc:'Next-gen Proxy',icon: FastForward, logoSrc:'/icons/velocity.svg'}
 ];
 
 const APPLICATION_SOFTWARE = [
-  {id:'nodejs',name:'Node.js',desc:'JS / TS Runtime & Discord Bots',icon: Code2},
-  {id:'python',name:'Python',desc:'Python 3.x Runtime & Scripts',icon: TerminalSquare}
+  {id:'nodejs',name:'Node.js',desc:'JS / TS Runtime & Discord Bots',icon: Code2, logoSrc: '/icons/nodejs.svg'},
+  {id:'python',name:'Python',desc:'Python 3.x Runtime & Scripts',icon: TerminalSquare, logoSrc: '/icons/python.svg'}
 ];
 
 const SOFTWARE = [...MINECRAFT_SOFTWARE, ...APPLICATION_SOFTWARE];
 
-const STEPS = ['IDENTITY','RESOURCES','ACCESS','SOFTWARE','REVIEW'];
+const STEPS = ['IDENTITY','RESOURCES','ACCESS','LIMITS','SOFTWARE','REVIEW'];
+
+const DATABASE_LIMITS = [0, 1, 3, 5, 10, 25];
+const BACKUP_LIMITS = [0, 1, 3, 5, 10, 25, 50];
 
 // Custom Dropdown Component
 function CustomDropdown({ value, options, onChange, renderValue, renderOption, placeholder }: any) {
@@ -207,7 +213,9 @@ export default function CreateServer() {
   
   const [state, setState] = useState({
     name: '', desc: '', ram: 4, cpu: 150, disk: 10, ip: '', port: 25565, runtimeType: defaultRuntime || 'docker', 
-    owner: user?.id || '', node: '', software: 'paper', version: '26.3', auto: true
+    owner: user?.id || '', node: '', software: 'paper', version: '', auto: true,
+    // Per-server allowances, editable later from the server's settings.
+    databaseLimit: 5, backupLimit: 10
   });
 
   useEffect(() => {
@@ -374,7 +382,9 @@ export default function CreateServer() {
         type: state.software,
         version: state.version,
         ownerId: state.owner || user?.id, runtimeType: state.runtimeType,
-        nodeId: state.node
+        nodeId: state.node,
+        databaseLimit: state.databaseLimit,
+        backupLimit: state.backupLimit
       };
       await axios.post("/api/servers", payload);
       
@@ -427,7 +437,7 @@ export default function CreateServer() {
               <ArrowLeft className="w-3.5 h-3.5" /> INSTANCES
             </button>
             <a href="#" onClick={(e) => { e.preventDefault(); navigate('/servers'); }} className="flex items-center gap-3 group">
-              <span className="font-display font-bold text-lg tracking-wide">JTG <span className="text-[#8f8f8f] font-medium">PANEL</span></span>
+              <span className="font-display font-bold text-lg tracking-wide">IVM <span className="text-[#8f8f8f] font-medium">PANEL</span></span>
               <div className="w-7 h-7 bg-white flex items-center justify-center group-hover:rotate-45 transition-transform duration-500">
                 <div className="w-3.5 h-3.5 bg-black"></div>
               </div>
@@ -696,14 +706,30 @@ export default function CreateServer() {
                       <label className="flex items-center gap-2 text-sm text-[#8f8f8f] mb-2.5">
                         <HardDrive className="w-4 h-4" /> Disk Limit (GB)
                       </label>
-                      <input 
-                        type="number" min="1" 
-                        className="inp font-mono" 
-                        value={state.disk}
-                        onChange={(e) => updateState('disk', Number(e.target.value))}
-                      />
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {[10, 25, 50, 100].map((gb) => (
+                          <button
+                            key={gb}
+                            type="button"
+                            onClick={() => updateState('disk', gb)}
+                            className={`px-3 py-2 font-mono text-xs border transition-all ${state.disk === gb ? 'bg-white text-black border-white' : 'bg-transparent text-[#8f8f8f] border-[#232323] hover:border-[#5a5a5a] hover:text-white'}`}
+                          >
+                            {gb} GB
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number" min="1" max="500" step="1"
+                          className="inp font-mono"
+                          value={state.disk}
+                          onChange={(e) => updateState('disk', Number(e.target.value))}
+                          onBlur={(e) => updateState('disk', Math.min(500, Math.max(1, Math.round(Number(e.target.value) || 1))))}
+                        />
+                        <span className="font-mono text-xs text-[#8f8f8f] shrink-0">GB</span>
+                      </div>
                       <p className="text-[11px] text-[#4c4c4c] mt-2.5 font-mono flex items-center gap-1.5">
-                        <Info className="w-3.5 h-3.5" /> Storage space allocated to this server.
+                        <Info className="w-3.5 h-3.5" /> Disk space in gigabytes (1–500 GB) allocated to this server.
                       </p>
                     </div>
                   </div>
@@ -818,6 +844,7 @@ export default function CreateServer() {
                   <div>
                     <div className="flex items-center gap-3 mb-4">
                       <span className="font-mono text-xs text-[#4c4c4c]">04A</span>
+                      <img src="/icons/minecraft.svg" alt="Minecraft" className="h-5 w-5" />
                       <h2 className="font-display font-bold tracking-wide text-sm text-white">MINECRAFT ENGINES</h2>
                       <span className="flex-1 h-px bg-[#232323]"></span>
                     </div>
@@ -833,7 +860,16 @@ export default function CreateServer() {
                             className={`sel-card soft-card p-4 flex flex-col items-center text-center ${state.software === s.id ? 'selected' : ''}`}
                           >
                             <span className="tick"><Check className="w-3 h-3 stroke-[3]" /></span>
-                            <Icon className="ic w-6 h-6 mb-2.5" />
+                            {s.logoSrc ? (
+                              <img
+                                src={s.logoSrc}
+                                alt={s.name}
+                                loading="lazy"
+                                className="mb-2.5 h-7 w-7 rounded-md object-contain"
+                              />
+                            ) : (
+                              <Icon className="ic w-6 h-6 mb-2.5" />
+                            )}
                             <span className="font-display font-semibold text-sm text-white">{s.name}</span>
                             <span className="text-[10px] text-[#4c4c4c] mt-1 leading-tight">{s.desc}</span>
                           </button>
@@ -862,7 +898,7 @@ export default function CreateServer() {
                           >
                             <span className="tick"><Check className="w-3 h-3 stroke-[3]" /></span>
                             <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                              <Icon className="ic w-5 h-5 text-white" />
+                              {s.logoSrc ? <img src={s.logoSrc} alt={s.name} className="w-6 h-6" /> : <Icon className="ic w-5 h-5 text-white" />}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -932,6 +968,8 @@ export default function CreateServer() {
                         {(user?.role === "admin" || user?.role === "owner") && renderReviewRow('NODE ID', state.node || '—')}
                         {renderReviewRow('SOFTWARE', SOFTWARE.find(s => s.id === state.software)?.name || 'Unknown')}
                         {renderReviewRow('VERSION', state.version || 'latest')}
+                        {renderReviewRow('DATABASES', state.databaseLimit === 0 ? 'None' : `${state.databaseLimit} allowed`)}
+                        {renderReviewRow('BACKUPS', state.backupLimit === 0 ? 'None' : `${state.backupLimit} allowed`)}
                         {!['nodejs', 'python'].includes(state.software) && renderReviewRow('JAVA RUNTIME', `Java ${getJavaVersionForMinecraft(state.version, state.software)} (Auto-detected)`)}
                         
                         <div className="px-4 py-4">
